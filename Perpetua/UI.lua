@@ -1045,7 +1045,7 @@ local function renderForums()
   local C = forum.canvas
   C:Reset()
   if not f then
-    C:Para(color(T.HEX.muted, "The forums arrive from an officer's addon: when an officer with the Perpetua app logs in or presses Sync now, they're shared with everyone online."), "body")
+    C:Para(color(T.HEX.muted, "The forums arrive from an officer's addon: when an officer with the Perpetua app logs in or presses Save & reload, they're shared with everyone online."), "body")
     return
   end
   if not current then
@@ -1318,11 +1318,11 @@ local function buildExport(page)
   scroll:SetScrollChild(edit)
   export.edit = edit
 
-  local sync = T.button(page, "Sync now", 150, function() ns.refreshSelf(true); ReloadUI() end, "tab")
+  local sync = T.button(page, "Save & reload", 150, function() ns.saveAndReload() end, "tab")
   sync:SetPoint("BOTTOMRIGHT", 0, 6)
   sync:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Sync now", T.C.gold[1], T.C.gold[2], T.C.gold[3])
+    GameTooltip:AddLine("Save & reload", T.C.gold[1], T.C.gold[2], T.C.gold[3])
     GameTooltip:AddLine("Reloads your UI so WoW saves the guild's data for the Perpetua app.", 1, 1, 1, true)
     GameTooltip:Show()
   end)
@@ -1358,7 +1358,7 @@ function ns.renderExport(focus)
   export.text = ns.pack(d)
   export.edit:SetText(export.text)
   export.info:SetText("Paste this on " .. color(T.HEX.gold, ns.SITE .. "/characters/" .. safe((ns.selfName:gsub(" ", "-")))) .. " while signed in. It's selected: press " ..
-    color(T.HEX.pale, "Ctrl+C") .. ".\nOr let the officers' Perpetua app pick it up: it's saved when you log out or press Sync now.\n" ..
+    color(T.HEX.pale, "Ctrl+C") .. ".\nOr let the officers' Perpetua app pick it up: it's saved when you log out or press Save & reload.\n" ..
     (PerpetuaDB.link and color(T.HEX.ok, "Link code " .. safe(PerpetuaDB.link.code) .. " is waiting for the next guild sync.")
       or color(T.HEX.muted, "Not on the site yet? Get a code at " .. ns.SITE .. "/member and type /perpetua link CODE.")) .. "\n\n" .. summary(d))
   local n = 0
@@ -1368,7 +1368,7 @@ function ns.renderExport(focus)
 end
 
 -- ---------- Hide Olympus page ----------
--- Opened from "Hide Olympus" above Sync now in the sidebar (Olympus.lua does the hiding). The sidebar switch turns
+-- Opened from "Hide Olympus" above Save & reload in the sidebar (Olympus.lua does the hiding). The sidebar switch turns
 -- everything on or off; here each part can be switched off on its own.
 
 local oly = {}
@@ -1480,7 +1480,7 @@ local TABS = {
   { "Attunements", buildAttunements, renderAttunements, group = "Reference" },
   { "Crafters", buildCrafters, renderCrafters, group = "Reference" },
   { "Welcome", buildWelcome, renderWelcome, noNav = true }, -- the only page for characters outside the guild
-  { "Hide Olympus", buildOlympus, renderOlympus, noNav = true }, -- opened from its row above Sync now
+  { "Hide Olympus", buildOlympus, renderOlympus, noNav = true }, -- opened from its row above Save & reload
 }
 if not ns.FORUMS then
   for i, t in ipairs(TABS) do if t[1] == "Forums" then table.remove(TABS, i) break end end
@@ -1593,7 +1593,11 @@ local function build()
   main.groups = {}
   for _, t in ipairs(TABS) do
     if not t.noNav then
-      local b = T.navButton(side, t[1], "Interface\\Icons\\" .. NAV[t[1]][1], function() ns.showTab(t[1]) end)
+      local b = T.navButton(side, t[1], "Interface\\Icons\\" .. NAV[t[1]][1], function()
+        -- "Character" under You is you, not whoever was looked at last from the Guild page.
+        if t[1] == "Character" then ns.selected = ns.selfName end
+        ns.showTab(t[1])
+      end)
       b:SetPoint("RIGHT", -1, 0)
       tabs[t[1]] = b
       if t.group and not main.groups[t.group] then
@@ -1629,14 +1633,14 @@ local function build()
   main.olySwitch = T.switch(oly, ns.olympus.set)
   main.olySwitch:SetPoint("RIGHT", 0, 0)
   main.olyRow = oly
-  local sync = T.button(card, "Sync now", 140, function() ns.refreshSelf(true); ReloadUI() end, "tab")
+  local sync = T.button(card, "Save & reload", 140, function() ns.saveAndReload() end, "tab")
   sync:SetPoint("TOPLEFT", 12, -80); sync:SetPoint("RIGHT", -12, 0)
   main.syncButton = sync
   local version = T.text(card, "muted", "CENTER"); version:SetPoint("TOP", sync, "BOTTOM", 0, -6)
   version:SetText("v" .. ns.VERSION); version:SetAlpha(0.6)
   sync:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Sync now", T.C.gold[1], T.C.gold[2], T.C.gold[3])
+    GameTooltip:AddLine("Save & reload", T.C.gold[1], T.C.gold[2], T.C.gold[3])
     GameTooltip:AddLine("Reloads your UI so WoW saves the guild's data for the Perpetua app, and loads the newest calendar" .. (ns.FORUMS and " and forums" or "") .. ".", 1, 1, 1, true)
     GameTooltip:Show()
   end)
@@ -1714,6 +1718,20 @@ function ns.showTab(name)
   main.subtitle:SetText(NAV[name][2])
   main:Show()
   ns.refreshUI(true)
+end
+
+-- WoW only writes saved variables on logout or a UI reload, so "saving" for the Perpetua app means reloading.
+-- Asked first (it closes everything for a few seconds), and not in combat.
+function ns.saveAndReload()
+  if InCombatLockdown() then
+    print("|cffd4af37Perpetua|r: Save & reload waits until you're out of combat.")
+    return
+  end
+  T.dialog({
+    title = "Save & reload", accept = "Reload",
+    text = "Reloads your UI so WoW saves your profile and the guild's data for the Perpetua app, and loads the newest raid calendar. It takes a few seconds.",
+    onAccept = function() ns.refreshSelf(true); ReloadUI() end,
+  })
 end
 
 local pendingRefresh = false

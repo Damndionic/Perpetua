@@ -80,6 +80,8 @@ events:SetScript("OnEvent", function(_, event, ...)
     local craft = event:find("^CRAFT") ~= nil
     if scanTimer then scanTimer:Cancel() end
     scanTimer = C_Timer.NewTimer(1, function() scanTimer = nil; pcall(craft and ns.scanCraft or ns.scanTradeSkill) end)
+  elseif event == "UPDATE_FACTION" and ns.repReadAt and GetTime() - ns.repReadAt < 2 then
+    return -- our own header toggles while reading reputations (Collect.lua), not a real change
   elseif CHANGES[event] and started then
     for _, section in ipairs(SECTIONS_FOR[event] or {}) do ns.markDirty(section) end
     ns.scheduleRefresh(CHANGES[event])

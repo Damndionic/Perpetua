@@ -151,6 +151,7 @@ function A.disband()
     text = "Disband <" .. safe(ns.guildName() or "") .. ">? Everyone is removed and the guild is gone for good.\n\nType DISBAND to confirm.",
     input = { maxLetters = 7 },
     command = function(text) return (text or ""):upper() == "DISBAND" and ns.guildSlash("disband") or nil end,
+    okUsable = function(text) return text:upper() == "DISBAND" end, okWhy = "Type DISBAND first.",
   })
 end
 ns.guildActions = A

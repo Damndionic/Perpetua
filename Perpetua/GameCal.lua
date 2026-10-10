@@ -17,6 +17,13 @@ local DESC_MAX = 250
 
 local loaded, busy, lastError = false, false, nil
 
+-- A Lua error is for us, not for the officer: the bar says something useful; test installs (-dev) print the detail.
+local FRIENDLY = "Couldn't update the guild calendar. Try again, or use Blizzard's calendar."
+local function internalError(err)
+  if ns.DEV then print("|cffd4af37Perpetua|r (dev) guild calendar: " .. tostring(err)) end
+  return FRIENDLY
+end
+
 local function api() return C_Calendar and C_Calendar.CreateGuildSignUpEvent and C_Calendar.AddEvent and C_DateAndTime end
 
 local function store()
@@ -79,7 +86,7 @@ local function keepingMonth(fn)
   local ok, a, b = pcall(fn)
   if cur and cur.month then pcall(showMonth, cur.month, cur.year) end
   scanning, scannedAt = false, GetTime()
-  if not ok then lastError = tostring(a) return nil end
+  if not ok then lastError = internalError(a) return nil end
   return a, b
 end
 
@@ -206,7 +213,7 @@ function ns.gameCalStep()
       store()[e.id] = { title = item.title, t = tonumber(e.t) }
     end
   end)
-  if not ok then busy = false; lastError = tostring(err) end
+  if not ok then busy = false; lastError = internalError(err) end
   if busy then C_Timer.After(10, function() if busy then busy = false; recheck(); ns.refreshUI() end end) end -- no answer: let them try again
   recheck()
   ns.refreshUI()

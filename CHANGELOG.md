@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.14.0
+
+- **Save & reload** (was "Sync now") asks before reloading your UI and waits until you're out of combat.
+- The sidebar's **Character** always opens your own character, not whoever you last looked at.
+- Dialogs: one OK when there's nothing to confirm (Leave as Guild Master), and Disband stays greyed until you type DISBAND; pressing Enter where a click is needed says so.
+- The guild calendar bar shows a plain message instead of a Lua error if something goes wrong.
+- Hide Olympus's /who search uses the game's class names (every class, in your client's language).
+- Reading reputations no longer triggers another read of itself.
+- The CurseForge page describes what the addon does now.
+
 ## 2.13.0
 
 ### Fixes: guild officer tools work again

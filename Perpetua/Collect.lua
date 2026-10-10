@@ -179,6 +179,9 @@ local function collectReputation(d)
         if f and f.isHeader and not f.isCollapsed and closed[f.factionID] then try(R.CollapseFactionHeader, i) end
       end
     end
+    -- Opening and closing headers fires UPDATE_FACTION; Core.lua ignores the echo for a moment so this read
+    -- doesn't schedule itself again.
+    if next(closed) then ns.repReadAt = GetTime() end
   elseif GetNumFactions then
     for i = 1, (try(GetNumFactions) or 0) do
       local name, _, standing, low, high, value, _, _, isHeader, _, hasRep, _, _, factionID = try(GetFactionInfo, i)

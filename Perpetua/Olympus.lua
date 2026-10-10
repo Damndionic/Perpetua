@@ -391,15 +391,27 @@ end
 
 -- /who finds up to 50 players at a time, so the button works through level and class groups, one per click. The
 -- game only allows /who from a click or key press, which is why it can't run by itself.
+-- The class names come from the game (this client's classes, in its language): /who's c-"..." only matches the
+-- localized name. Built the first time it's used, when the class list is sure to be loaded.
 local WHO = {}
-for _, levels in ipairs({ "60", "55-59", "50-54", "40-49", "30-39", "20-29", "10-19", "1-9" }) do
-  for _, class in ipairs({ "Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Mage", "Warlock", "Druid" }) do
-    WHO[#WHO + 1] = levels .. ' c-"' .. class .. '"'
+local FALLBACK_CLASSES = { "Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Shaman", "Mage", "Warlock", "Druid" }
+local function buildWho()
+  if #WHO > 0 then return end
+  local classes = {}
+  for i = 1, (try(GetNumClasses) or 0) do
+    local name = ns.text(try(GetClassInfo, i))
+    if name then classes[#classes + 1] = name end
   end
+  if #classes == 0 then classes = FALLBACK_CLASSES end
+  for _, levels in ipairs({ "60", "55-59", "50-54", "40-49", "30-39", "20-29", "10-19", "1-9" }) do
+    for _, class in ipairs(classes) do WHO[#WHO + 1] = levels .. ' c-"' .. class .. '"' end
+  end
+  O.WHO_TOTAL = #WHO
 end
-O.WHO_TOTAL = #WHO
+O.WHO_TOTAL = #FALLBACK_CLASSES * 8 -- until the first search builds the real list
 
 function O.lookUp()
+  buildWho()
   local db = O.db()
   db.whoNext = (db.whoNext or 0) % #WHO + 1
   local query = 'g-"' .. ns.OLYMPUS_WHO .. '" ' .. WHO[db.whoNext]

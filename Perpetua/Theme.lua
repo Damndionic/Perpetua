@@ -489,16 +489,22 @@ function T.dialog(opts)
     edit:SetScript("OnEscapePressed", function() f:Hide() end)
     edit:SetScript("OnEnterPressed", function(self)
       if self:IsMultiLine() and not IsShiftKeyDown() then self:Insert("\n") return end
-      if f.command then return end -- a guild action needs a real click on the button
+      if f.command then -- a guild action needs a real click on the button
+        f.hint:SetText("Click " .. (f.ok.label:GetText() or "OK"):lower() .. " to confirm.")
+        return
+      end
       f.ok:Click()
     end)
     edit:SetScript("OnTextChanged", function(self)
       local n, max = #(self:GetText() or ""), self:GetMaxLetters()
       f.count:SetText(max > 0 and (n .. " / " .. max) or "")
+      if f.okUsable then f.ok:SetUsable(f.okUsable(self:GetText() or ""), f.okWhy) end
     end)
     f.holder, f.scroll, f.edit = holder, scroll, edit
     f.count = T.text(f, "muted", "RIGHT")
     f.count:SetPoint("TOPRIGHT", holder, "BOTTOMRIGHT", 0, -4)
+    f.hint = T.text(f, "muted")
+    f.hint:SetPoint("BOTTOMLEFT", 22, 24)
     f.ok = T.button(f, "OK", 110, function()
       if f.command then return end -- guild actions run through the secure button over this one (or not, in combat)
       local value = f.holder:IsShown() and (f.edit:GetText() or "") or nil
@@ -515,6 +521,14 @@ function T.dialog(opts)
   local f = dialog
   f.onAccept = opts.onAccept
   f.command = opts.command
+  -- okUsable(text): the confirm button stays greyed until the input is right (okWhy says what's missing). A dialog
+  -- with nothing to confirm (no onAccept or command) shows just one button.
+  f.okUsable, f.okWhy = opts.okUsable, opts.okWhy
+  f.hint:SetText("")
+  local confirmable = opts.onAccept ~= nil or opts.command ~= nil
+  f.ok:SetShown(confirmable)
+  f.cancel.label:SetText(confirmable and "CANCEL" or "OK")
+  f.ok:SetUsable(true)
   if f.command and not f.secured and ns.secureGuildCommand then
     f.secured = true
     ns.secureGuildCommand(f.ok, function()
@@ -538,6 +552,7 @@ function T.dialog(opts)
     f.edit:SetMultiLine(input.multiline and true or false)
     f.edit:SetMaxLetters(input.maxLetters or 0)
     f.edit:SetText(input.text or "")
+    if f.okUsable then f.ok:SetUsable(f.okUsable(input.text or ""), f.okWhy) end
     f.edit:SetHeight(inputH - 12)
     f.edit:HighlightText()
   end
