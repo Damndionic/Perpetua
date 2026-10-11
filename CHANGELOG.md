@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.15.0
+
+- **Window size**: make the window bigger or smaller with Ctrl + mouse wheel on it, `/ppta scale 70`–`150`, or the slider in Options > AddOns > Perpetua. Its pop-ups follow.
+- Officer tools are greyed out with the reason instead of disappearing: Invite and Guild Control on the Guild page, the member panel's Promote, Demote, Remove and Make leader, the right-click menu, Guild Info's Edit and Disband, and the calendar's Add. Members without officer powers don't see the officer tools at all.
+- Easier to read: greyed-out things are less faint, the small labels are a size up, and the darkest grey text is lighter.
+- Layout: a long rank name on Promote / Demote ends in "…" (the tooltip has it in full), Guild Info's bottom row no longer overlaps for a Guild Master, the page subtitle stops before the numbers beside it, and the member panel drops its item level badge when a long rank name leaves no room.
+- The guild calendar puts raids at the right realm time across a clock change (US and EU change on different weekends), instead of an hour off.
+- Former members' profiles are let go 30 days after they leave the guild roster.
+- Faster with a big guild: lists only draw the rows on screen, each member's line is worked out once per profile, the Loot page finds each drop's rolls without scanning them all, and Crafters only unpacks recipes that changed.
+- Smaller download: the text fonts are cut down to the letters the game uses (Latin and Cyrillic), and one font is no longer needed.
+
 ## 2.14.0
 
 - Clicking a note (or "Blizzard's guild window") opens Blizzard's guild window again; 2.13.0 broke it.

@@ -75,7 +75,6 @@ local function rights(m)
   local promote, demote = try(CanGuildPromote), try(CanGuildDemote)
   return {
     -- One rank up (never to your own rank or above) or one down.
-    ranks = not m.isSelf and (promote or demote) and m.rankOrder > mine and true or false, -- show the two buttons
     promote = not m.isSelf and promote and m.rankOrder > mine + 1,
     demote = not m.isSelf and demote and m.rankOrder < maxRank and m.rankOrder > mine,
     remove = not m.isSelf and try(CanGuildRemove) and m.rankOrder > mine,
@@ -83,7 +82,28 @@ local function rights(m)
     viewOfficer = try(C_GuildInfo.CanViewOfficerNote),
     officerNote = try(C_GuildInfo.CanEditOfficerNote),
     leader = not m.isSelf and try(IsGuildLeader),
+    -- Any officer power at all: officers see every officer tool, greyed out with the reason when it doesn't apply
+    -- to this member, so the panel and menu look the same for everyone. Members see none of them.
+    officer = (promote or demote or try(CanGuildRemove) or try(IsGuildLeader)) and true or false,
   }
+end
+
+-- Why an officer tool is greyed out for member m (rights r).
+local function whyNot(kind, m, r)
+  local mine = myRankOrder()
+  if kind == "remove" then
+    if not try(CanGuildRemove) then return "Your rank can't remove members." end
+    return "Can't remove " .. m.name .. ": their rank is yours or above."
+  elseif kind == "leader" then
+    return "Only the Guild Master can hand over the guild."
+  elseif kind == "promote" then
+    if not try(CanGuildPromote) then return "Your rank can't promote." end
+    return "Can't promote " .. m.name .. " further: the next rank up is yours or above."
+  elseif kind == "demote" then
+    if not try(CanGuildDemote) then return "Your rank can't demote." end
+    if m.rankOrder <= mine then return "Can't demote " .. m.name .. ": their rank is yours or above." end
+    return m.name .. " is already at the lowest rank."
+  end
 end
 
 -- ---------- actions ----------
@@ -174,10 +194,22 @@ local function memberMenu(owner, m)
     if ns.players()[m.name] then
       root:CreateButton("View profile", function() ns.selected = m.name; ns.showTab("Character") end)
     end
-    -- Rank changes need a real click on a button (the game's rule), so the menu opens the member panel for them.
-    if r.promote or r.demote then root:CreateButton("Change rank…", function() R.selected = m.guid; ns.refreshUI(true) end) end
-    if r.leader then root:CreateButton("Make guild leader", function() A.leader(m) end) end
-    if r.remove then root:CreateButton(color(T.HEX.danger, "Remove from guild"), function() A.remove(m) end) end
+    -- Officer tools: greyed out (with the reason) when they don't apply to this member.
+    local function officerItem(text, allowed, why, fn)
+      local b = root:CreateButton(text, fn)
+      if not allowed then
+        b:SetEnabled(false)
+        if b.SetTooltip then b:SetTooltip(function(tooltip) tooltip:AddLine(why, 1, 1, 1, true) end) end
+      end
+    end
+    if r.officer and not m.isSelf then
+      -- Rank changes need a real click on a button (the game's rule), so the menu opens the member panel for them.
+      officerItem("Change rank…", r.promote or r.demote, whyNot(r.promote and "demote" or "promote", m, r),
+        function() R.selected = m.guid; ns.refreshUI(true) end)
+      officerItem("Make guild leader", r.leader, whyNot("leader", m, r), function() A.leader(m) end)
+      officerItem(r.remove and color(T.HEX.danger, "Remove from guild") or "Remove from guild", r.remove, whyNot("remove", m, r),
+        function() A.remove(m) end)
+    end
     if m.isSelf then root:CreateButton(color(T.HEX.danger, "Leave guild"), function() A.leave() end) end
   end)
 end
@@ -245,6 +277,8 @@ local function buildPanel(parent)
   }
   ns.secureGuildCommand(p.buttons.promote, function() return A.stepCommand(R.member, -1) end, "Promote", nil, refreshSoon)
   ns.secureGuildCommand(p.buttons.demote, function() return A.stepCommand(R.member, 1) end, "Demote", nil, refreshSoon)
+  -- A long rank name ends in "…" inside the button; the tooltip has it in full.
+  for _, k in ipairs({ "promote", "demote" }) do p.buttons[k].label:SetWidth(96); p.buttons[k].label:SetWordWrap(false) end
   for _, k in ipairs({ "remove", "leave" }) do
     local b = p.buttons[k]
     b.edge:SetColor({ 1, 0.54, 0.48 }, 0.55)
@@ -265,6 +299,8 @@ local function renderPanel(p, m, others, info)
   p.badges[2]:Set(nil, safe(m.rank), m.rankOrder <= 2)
   p.badges[3]:SetShown(info and info.ilvl ~= nil)
   if info and info.ilvl then p.badges[3]:Set("iLvl", info.ilvl) end
+  -- A long rank name leaves no room for the third badge on the panel (it would run off the edge): it's in the list.
+  if p.badges[1]:GetWidth() + p.badges[2]:GetWidth() + p.badges[3]:GetWidth() + 10 > 224 then p.badges[3]:Hide() end
   local spec = info and info.spec ~= "" and (info.spec .. " ") or ""
   p.line1:SetText(spec .. safe(m.className or ""))
   p.line2:SetText((m.zone ~= "" and (safe(m.zone) .. "  ·  ") or "") .. lastOnlineText(m))
@@ -290,10 +326,11 @@ local function renderPanel(p, m, others, info)
       prev = fs
     end
   end
+  local officer = r.officer and not m.isSelf
   local show = {
-    -- Promote and Demote stay put for officers (greyed out when that move isn't possible) so the panel doesn't shift.
-    whisper = not m.isSelf, group = not m.isSelf, promote = r.ranks, demote = r.ranks,
-    profile = true, leader = r.leader, remove = r.remove, leave = m.isSelf,
+    -- Officer tools stay put for officers (greyed out when they don't apply) so the panel doesn't shift.
+    whisper = not m.isSelf, group = not m.isSelf, promote = officer, demote = officer,
+    profile = true, leader = officer, remove = officer, leave = m.isSelf,
   }
   -- Fixed pairs, one pair per row, so related buttons stay side by side whatever else is shown.
   local PAIRS = { { "whisper", "group" }, { "promote", "demote" }, { "profile", "leader" }, { "remove", "leave" } }
@@ -309,13 +346,16 @@ local function renderPanel(p, m, others, info)
   local function arrow(dir) return "|TInterface\\AddOns\\Perpetua\\Media\\arrow-" .. dir .. ":9:9:0:0:32:32:0:32:0:32:212:175:55|t " end
   p.buttons.promote.label:SetText(r.promote and (arrow("up") .. rankName(m.rankOrder - 1):upper()) or "PROMOTE")
   p.buttons.demote.label:SetText(r.demote and (arrow("down") .. rankName(m.rankOrder + 1):upper()) or "DEMOTE")
+  p.buttons.promote.secureTip = r.promote and ("To " .. rankName(m.rankOrder - 1) .. ".") or nil
+  p.buttons.demote.secureTip = r.demote and ("To " .. rankName(m.rankOrder + 1) .. ".") or nil
   -- Profile is always there, greyed out for members without the addon (nothing to show yet).
   local rec = ns.players()[m.name]
   p.buttons.profile:SetUsable(type(rec) == "table" and rec.profile ~= nil,
     m.name .. " doesn't have the Perpetua addon yet (or hasn't been online with it), so there's no profile to show.")
-  p.buttons.promote:SetUsable(r.promote, "Can't promote " .. m.name .. " further: the next rank up is yours or above, or your rank can't promote.")
-  p.buttons.demote:SetUsable(r.demote, m.rankOrder >= (ns.num(try(GuildControlGetNumRanks)) or 0)
-    and (m.name .. " is already at the lowest rank.") or ("Can't demote " .. m.name .. ": your rank can't demote."))
+  p.buttons.promote:SetUsable(r.promote, whyNot("promote", m, r))
+  p.buttons.demote:SetUsable(r.demote, whyNot("demote", m, r))
+  p.buttons.remove:SetUsable(r.remove, whyNot("remove", m, r))
+  p.buttons.leader:SetUsable(r.leader, whyNot("leader", m, r))
   p.buttons.group:SetUsable(m.online, m.name .. " is offline.")
   local rows = #rowsShown
   for row, keys in ipairs(rowsShown) do
@@ -344,8 +384,8 @@ function ns.buildRoster(page)
   holder:SetPoint("TOPLEFT"); holder:SetPoint("BOTTOMRIGHT")
   R.holder = holder
   R.list = ns.List(holder, {
-    { "Name", 146 }, { "Lvl", 26, "RIGHT" }, { "Rank", 102, pill = true }, { "Spec", 104 }, { "iLvl", 30, "RIGHT" },
-    { "Professions", 108 }, { "Note", 86 }, { "Last on", 62, "RIGHT" },
+    { "Name", 146 }, { "Lvl", 26, "RIGHT" }, { "Rank", 110, pill = true }, { "Spec", 104 }, { "iLvl", 30, "RIGHT" },
+    { "Professions", 108 }, { "Note", 78 }, { "Last on", 62, "RIGHT" },
   }, function(i)
     if R.sort == i then R.desc = not R.desc else R.sort, R.desc = i, (i == 2 or i == 5) end
     ns.refreshUI(true)
@@ -379,23 +419,30 @@ function ns.buildRoster(page)
   page:SetScript("OnShow", function() try(C_GuildInfo.GuildRoster) end)
 end
 
--- Guild sync's knowledge of a player, for the list and the tooltip.
+-- Guild sync's knowledge of a player, for the list and the tooltip. Worked out once per profile: a new profile
+-- is a new table (Comm.lua accept, refreshSelf), so the cache is checked by identity.
+local infoCache = {}
 local function syncInfo(name)
   local rec = ns.players()[name]
-  local p = type(rec) == "table" and rec.profile or nil
+  rec = type(rec) == "table" and rec or nil
+  local p = rec and rec.profile or nil
+  local cached = infoCache[name]
+  if cached and cached.rec == rec and cached.profile == p then return cached end
   local spec = p and p.spec and p.spec.n
   local cls = p and p.char and p.char.class
   if spec and cls and spec == cls then spec = nil end -- older addons sent Forever's class-named spec
-  return {
-    rec = type(rec) == "table" and rec or nil, profile = p,
+  local info = {
+    rec = rec, profile = p,
     spec = spec and safe(spec) or "", ilvl = p and ns.avgItemLevel(p),
     profs = ns.professionsText(p), raids = ns.raidsText(p),
   }
+  infoCache[name] = info
+  return info
 end
 
 local function addonStatus(info)
   local rec = info.rec
-  if not rec then return color("5a6380", "no addon") end
+  if not rec then return color(T.HEX.dim, "no addon") end
   if not info.profile and rec.addon and ns.newer(ns.VERSION, rec.addon) then return color(T.HEX.warm, "old addon " .. safe(rec.addon)) end
   local stamp = math.max(rec.pt or 0, rec.rt or 0)
   return color(T.HEX.muted, "profile from " .. ns.ago(stamp > 0 and stamp or rec.heard))
@@ -510,13 +557,15 @@ function ns.renderRoster()
   local withAddon = 0
   for _, rec in pairs(ns.players()) do if type(rec) == "table" and rec.profile then withAddon = withAddon + 1 end end
   ns.setStats({ { #all, "members" }, { online, "online", "ok" }, { withAddon, "with the addon" } })
-  -- Right end of the top bar, right to left: + Invite, Guild Control, Blizzard UI (only those that apply).
+  -- Right end of the top bar, right to left: + Invite, Guild Control, Blizzard UI, with the New guild window. A
+  -- rank that can't invite or open Guild Control sees them greyed out, with the reason.
   local on = ns.newGuildWindow()
+  R.invite:SetUsable(try(CanGuildInvite), "Your rank can't invite to the guild.")
+  R.control:SetUsable(A.canGuildControl(), "Guild Control (rank names and permissions) is for the Guild Master and ranks that can promote.")
   local x = -26
-  for _, item in ipairs({ { R.invite, on and try(CanGuildInvite) }, { R.control, on and A.canGuildControl() }, { R.blizzard, on } }) do
-    local b, show = item[1], item[2] and true or false
-    b:SetShown(show)
-    if show then b:ClearAllPoints(); b:SetPoint("TOPRIGHT", x, -1); x = x - b:GetWidth() - 8 end
+  for _, b in ipairs({ R.invite, R.control, R.blizzard }) do
+    b:SetShown(on)
+    if on then b:ClearAllPoints(); b:SetPoint("TOPRIGHT", x, -1); x = x - b:GetWidth() - 8 end
   end
   if not ns.newGuildWindow() then selected = nil end
   R.holder:SetPoint("BOTTOMRIGHT", selected and -268 or 0, 0)
@@ -528,6 +577,7 @@ end
 -- ---------- Guild Info page ----------
 
 local G = {}
+ns.guildUIForTest = { R = R, G = G } -- for the test harness
 
 local function scrollText(parent, fontKey)
   local scroll = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
@@ -587,8 +637,6 @@ function ns.buildGuildInfo(page)
   G.switch = switch
   local sl = T.text(page, "small"); sl:SetPoint("LEFT", switch, "RIGHT", 10, 0)
   sl:SetText("New guild window")
-  local hint = T.text(page, "muted"); hint:SetPoint("LEFT", sl, "RIGHT", 8, 0)
-  hint:SetText("(the guild key and button open this; Shift for Blizzard's)")
   G.control = T.button(page, "Guild Control", 130, function() A.guildControl() end, "tab")
   G.disband = T.button(page, "Disband", 100, function() A.disband() end, "tab")
   G.disband:SetPoint("BOTTOMRIGHT", 0, 4)
@@ -596,6 +644,10 @@ function ns.buildGuildInfo(page)
   G.leave:SetPoint("RIGHT", G.disband, "LEFT", -10, 0)
   G.control:SetPoint("RIGHT", G.leave, "LEFT", -10, 0)
   G.leave.label:SetTextColor(1, 0.54, 0.48); G.disband.label:SetTextColor(1, 0.54, 0.48)
+  -- The hint fills what's left between the switch and the buttons, ending in "…" if it must (it used to run under
+  -- Guild Control for a Guild Master).
+  local hint = T.text(page, "muted"); hint:SetPoint("LEFT", sl, "RIGHT", 8, 0); hint:SetPoint("RIGHT", G.control, "LEFT", -12, 0)
+  hint:SetText("(the guild key opens this; Shift for Blizzard's)")
   G.shown = false
   page:SetScript("OnShow", function() try(QueryGuildEventLog); try(C_GuildInfo.GuildRoster) end)
 end
@@ -610,8 +662,8 @@ function ns.renderGuildInfo()
   local info = try(C_GuildInfo.GetInfoText) or ""
   G.motd:SetText(motd ~= "" and safe(motd) or color(T.HEX.muted, "No message of the day."))
   G.info:SetText(info ~= "" and safe(info) or color(T.HEX.muted, "No guild information yet."))
-  G.motdEdit:SetShown(try(CanEditMOTD) and true or false)
-  G.infoEdit:SetShown(try(CanEditGuildInfo) and true or false)
+  G.motdEdit:SetUsable(try(CanEditMOTD), "Your rank can't change the message of the day.")
+  G.infoEdit:SetUsable(try(CanEditGuildInfo), "Your rank can't change the guild information.")
   local lines = {}
   for i = (ns.num(try(GetNumGuildEvents)) or 0), 1, -1 do
     local kind, p1, p2, rank, y, mo, d, h = try(GetGuildEventInfo, i)
@@ -627,11 +679,8 @@ function ns.renderGuildInfo()
   end
   G.log:SetText(#lines > 0 and table.concat(lines, "\n") or color(T.HEX.muted, "Nothing in the log yet."))
   G.switch:SetOn(ns.newGuildWindow())
-  G.disband:SetShown(try(IsGuildLeader) and true or false)
-  G.control:SetShown(A.canGuildControl())
-  -- Leave / Guild Control shift right when Disband isn't there.
-  G.leave:ClearAllPoints()
-  if G.disband:IsShown() then G.leave:SetPoint("RIGHT", G.disband, "LEFT", -10, 0) else G.leave:SetPoint("BOTTOMRIGHT", 0, 4) end
+  G.disband:SetUsable(try(IsGuildLeader), "Only the Guild Master can disband the guild.")
+  G.control:SetUsable(A.canGuildControl(), "Guild Control (rank names and permissions) is for the Guild Master and ranks that can promote.")
 end
 
 -- Redraw when the guild changes.

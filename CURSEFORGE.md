@@ -49,7 +49,7 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 - **Guild chat only.** Everything travels over the hidden guild addon channel, which only guild members can hear. The addon never connects to the internet, and it doesn't send or listen to anything at all on characters outside <Perpetua>.
 - **You only ever send your own character.** A profile is only accepted if the name inside it matches the player who sent it, so nobody can post data under someone else's name.
 - **Light on traffic.** Each character sends a short hello when you log in and every 10 minutes. Full profiles are only sent when something has changed (buffs and food don't count) and someone asks for it, are held back during combat and in raid instances, and are throttled the same way ChatThrottleLib is.
-- **Light on memory.** Guildmates' full profiles are kept compressed and only unpacked when you open their page.
+- **Light on memory.** Guildmates' full profiles are kept compressed and only unpacked when you open their page, and former members' are let go 30 days after they leave.
 - **Never shared:** gold, bags and bank contents, chat and whispers, or anything about your Battle.net account.
 
 ---
@@ -71,6 +71,7 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 | `/ppta export` | Your export for the site |
 | `/ppta sync` | Save for the Perpetua app (reloads your UI) |
 | `/ppta minimap` | Hide or show the minimap button |
+| `/ppta scale 90` | Window size in percent, 70 to 150 (Ctrl + mouse wheel on the window, or Options > AddOns > Perpetua) |
 | `/ppta olympus` | Hide Olympus: choose what to hide from Olympus guilds (`on` / `off` to flip it) |
 | `/ppta help` | List all commands |
 

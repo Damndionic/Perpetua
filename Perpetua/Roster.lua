@@ -9,6 +9,7 @@ local try = ns.try
 
 local SCAN_EVERY = 60       -- seconds between reads of the roster at most (GUILD_ROSTER_UPDATE fires a lot)
 local REQUEST_EVERY = 300   -- how often to ask the server for a fresh roster
+local GONE_FOR = 30 * 86400 -- how long a former member's profile is kept after they leave the roster
 
 local scanAt, scanQueued = 0, false
 
@@ -41,11 +42,24 @@ local function scan()
   if not next(roster) then return end
   ns.players() -- makes sure PerpetuaDB.guilds[guild] exists
   local g = PerpetuaDB.guilds[guild]
+  -- A roster read much shorter than the last one is a partial answer (the server still sending), not half the
+  -- guild leaving: it's not saved and nobody is marked as gone.
+  local count, before = 0, 0
+  for _ in pairs(roster) do count = count + 1 end
+  for _ in pairs(g.roster or {}) do before = before + 1 end
+  if count < before / 2 then return end
   g.roster, g.rosterAt = roster, now
-  -- Raise the level on players we have a profile for (the profile itself is theirs and stays as sent).
   for name, rec in pairs(g.players or {}) do
     local r = roster[name]
-    if type(rec) == "table" and r and r.l > (rec.level or 0) then rec.level = r.l end
+    if type(rec) == "table" then
+      -- Raise the level on players we have a profile for (the profile itself is theirs and stays as sent).
+      if r and r.l > (rec.level or 0) then rec.level = r.l end
+      -- Former members: kept 30 days after they leave the roster (in case they're back), then let go, so their
+      -- profiles (~8 KB each) don't stay in the saved file for good.
+      if r then rec.gone = nil
+      elseif not rec.gone then rec.gone = now
+      elseif now - rec.gone > GONE_FOR then g.players[name] = nil end
+    end
   end
   try(ns.refreshUI)
 end

@@ -155,11 +155,35 @@ function ns.onLootMessage(f, from)
   end
 end
 
+-- The rolls by time, made again only when the list changes (the Loot page asks once per drop shown: up to 300
+-- drops against up to 3000 rolls). Guildmates' rolls can arrive a little out of order, hence the sort.
+local byTime, byTimeFor, byTimeN, byTimeLast = {}, nil, -1, nil
+local function rollsByTime()
+  local list = store().rolls
+  local lastRoll = list[#list]
+  if list ~= byTimeFor or #list ~= byTimeN or lastRoll ~= byTimeLast then
+    byTime = {}
+    for i, r in ipairs(list) do byTime[i] = r end
+    table.sort(byTime, function(a, b) return (a.t or 0) < (b.t or 0) end)
+    byTimeFor, byTimeN, byTimeLast = list, #list, lastRoll
+  end
+  return byTime
+end
+
 -- The /rolls in the couple of minutes before a drop, highest first.
 function ns.rollsFor(e)
+  local list, from = rollsByTime(), e.t - 150
+  -- First roll at or after from (binary search), then forward while still in the window.
+  local lo, hi = 1, #list + 1
+  while lo < hi do
+    local mid = math.floor((lo + hi) / 2)
+    if (list[mid].t or 0) < from then lo = mid + 1 else hi = mid end
+  end
   local out = {}
-  for _, r in ipairs(store().rolls) do
-    if r.t >= e.t - 150 and r.t <= e.t + 5 then out[#out + 1] = r end
+  for i = lo, #list do
+    local r = list[i]
+    if (r.t or 0) > e.t + 5 then break end
+    out[#out + 1] = r
   end
   table.sort(out, function(a, b) return a.r > b.r end)
   return out

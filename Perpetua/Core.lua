@@ -108,6 +108,7 @@ local HELP = {
   { "minimap", "hide or show the minimap button" },
   { "olympus [on|off]", "hide chat and invites from Olympus guilds" },
   { "guildui [on|off]", "the new guild window: the guild key and button open Perpetua's" },
+  { "scale [70-150]", "window size in percent (or Ctrl + mouse wheel on the window)" },
   { "guild", "the guild roster" },
 }
 SlashCmdList.PERPETUA = function(msg)
@@ -140,6 +141,9 @@ SlashCmdList.PERPETUA = function(msg)
     print("|cffd4af37Perpetua|r: link code saved. Your characters will appear under your Discord account on " .. ns.SITE ..
       " the next time an officer syncs the guild.")
     ns.refreshUI(true)
+  elseif msg:match("^scale") then
+    local pct = tonumber(msg:match("^scale%s+(%d+)%%?$"))
+    if pct then ns.setScale(pct / 100) else print("|cffd4af37Perpetua|r: window size is " .. math.floor(ns.T.scale() * 100 + 0.5) .. "%. /ppta scale 70 to 150 changes it (or Ctrl + mouse wheel on the window).") end
   elseif msg == "me" then ns.selected = ns.selfName; ns.showTab("Character")
   elseif msg == "guild" or msg == "roster" then ns.showTab("Guild")
   elseif msg == "guildui" or msg == "guildui on" or msg == "guildui off" then

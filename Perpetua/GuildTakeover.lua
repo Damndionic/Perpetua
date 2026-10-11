@@ -131,13 +131,15 @@ end
 
 function ns.opensBlizzardGuild(button, title, tip)
   button.secureTitle, button.secureTip = title, tip
-  button:HookScript("OnEnter", function(self) if GuildMicroButton then float(blizzard, self) end end)
+  -- A greyed-out button (T.button SetUsable false) keeps the mouse: its tooltip says why, and nothing opens.
+  local function usable(self) return GuildMicroButton and (not self.IsEnabled or self:IsEnabled()) end
+  button:HookScript("OnEnter", function(self) if usable(self) then float(blizzard, self) end end)
   -- Our button and the secure one go away together (a dialog closing under the mouse, say).
   button:HookScript("OnHide", function(self) if hovering == self then onLeave(hoverSecure) end end)
   -- Only reached when the secure button wasn't over it: in combat, or the mouse never left after a click.
   button:HookScript("OnClick", function(self)
     if InCombatLockdown() then inCombatNote("Opening Blizzard's guild window from here")
-    elseif GuildMicroButton then float(blizzard, self) end -- the next click takes
+    elseif usable(self) then float(blizzard, self) end -- the next click takes
   end)
 end
 
@@ -218,6 +220,17 @@ local function registerSettings()
     "New guild window", false, ns.newGuildWindow, function(value) ns.setNewGuildWindow(value, true) end)
   Settings.CreateCheckbox(category, setting,
     "New: the guild key (J) and the guild button open Perpetua's guild window instead of Blizzard's. Hold Shift for Blizzard's.")
+  -- Window size (Theme.lua T.scale; also /ppta scale and Ctrl + mouse wheel on the window).
+  if Settings.CreateSlider and Settings.CreateSliderOptions and Settings.VarType.Number then
+    local T = ns.T
+    local size = Settings.RegisterProxySetting(category, "PERPETUA_WINDOW_SCALE", Settings.VarType.Number,
+      "Window size", 1, T.scale, function(value) ns.setScale(value, true) end)
+    local options = Settings.CreateSliderOptions(T.SCALE_MIN, T.SCALE_MAX, 0.05)
+    if MinimalSliderWithSteppersMixin and MinimalSliderWithSteppersMixin.Label then
+      options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(v) return math.floor(v * 100 + 0.5) .. "%" end)
+    end
+    Settings.CreateSlider(category, size, options, "How big the Perpetua window is. Ctrl + mouse wheel on the window does the same.")
+  end
   Settings.RegisterAddOnCategory(category)
 end
 

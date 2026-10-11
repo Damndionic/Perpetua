@@ -9,7 +9,8 @@
 -- made it, so two officers don't add it twice. PerpetuaDB.guilds[g].gameCal remembers which event stood for which
 -- raid (title and time), so a moved or cancelled raid's old event can be found and removed.
 --
--- Calendar times are realm time; the site's are UTC seconds. The difference comes from the calendar's clock.
+-- Calendar times are realm time; the site's are UTC seconds. The difference comes from the calendar's clock, with
+-- summer time worked out for the raid's date (realmDate below).
 local _, ns = ...
 
 local TITLE_MAX = 31  -- letters Blizzard's create-event title box takes
@@ -43,16 +44,83 @@ end
 
 local function titleOf(e) return clip(e.title or e.instance or "Raid", TITLE_MAX) end
 
--- Realm wall clock minus this computer's, rounded to 15 minutes.
-local function realmOffset()
-  local c = C_DateAndTime.GetCurrentCalendarTime()
-  if not c then return 0 end
-  local realm = time({ year = c.year, month = c.month, day = c.monthDay, hour = c.hour, min = c.minute, sec = 0 })
-  return math.floor((realm - time()) / 900 + 0.5) * 900
+-- Realm time for a raid weeks ahead can't use today's offset: the realm may change clocks before then (and US and
+-- EU change on different weekends). So: today's offset from UTC, less an hour if the realm is on summer time now,
+-- is its standard offset; a raid's offset is that, plus an hour if the realm is on summer time then. Summer time
+-- follows the region's rules (US realms in US time zones, EU realms); anywhere else keeps today's offset.
+-- All arithmetic is in UTC, so this computer's own time zone and clock changes play no part.
+
+-- Seconds since 1970 for a UTC calendar date (days-from-civil, so no time zone is involved).
+local function utc(y, m, d, h, min)
+  y = m <= 2 and y - 1 or y
+  local era = math.floor(y / 400)
+  local yoe = y - era * 400
+  local doy = math.floor((153 * (m + (m > 2 and -3 or 9)) + 2) / 5) + d - 1
+  local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+  return ((era * 146097 + doe - 719468) * 24 + (h or 0)) * 3600 + (min or 0) * 60
+end
+ns.utcSeconds = utc -- for the test harness
+
+-- Day of month of the nth Sunday (n = -1: the last) of a month.
+local function sunday(y, m, n)
+  local function weekday(d) return (math.floor(utc(y, m, d) / 86400) + 4) % 7 end -- 0 = Sunday (1970-01-01 was a Thursday)
+  if n > 0 then
+    local first = 1 + (7 - weekday(1)) % 7
+    return first + (n - 1) * 7
+  end
+  local last = 31
+  while last > 28 and date("!*t", utc(y, m, last)).month ~= m do last = last - 1 end
+  return last - weekday(last)
 end
 
--- UTC seconds -> the realm's { year, month, day, hour, min }.
-local function realmDate(t) return date("*t", t + realmOffset()) end
+-- Is the realm on summer time at UTC second t? std = its standard offset from UTC in seconds.
+local RULES = {
+  -- US and Canada: second Sunday in March, 2:00 local standard, to first Sunday in November, 2:00 local summer time.
+  us = function(t, std)
+    local y = date("!*t", t + std).year
+    local from = utc(y, 3, sunday(y, 3, 2), 2) - std
+    local to = utc(y, 11, sunday(y, 11, 1), 1) - std
+    return t >= from and t < to
+  end,
+  -- EU: last Sunday in March to last Sunday in October, both at 1:00 UTC.
+  eu = function(t)
+    local y = date("!*t", t).year
+    return t >= utc(y, 3, sunday(y, 3, -1), 1) and t < utc(y, 10, sunday(y, 10, -1), 1)
+  end,
+}
+
+-- Today's realm offset from UTC (calendar clock vs server clock), rounded to 15 minutes.
+local function currentOffset()
+  local c = C_DateAndTime.GetCurrentCalendarTime()
+  if not c then return 0 end
+  local now = ns.now()
+  return math.floor((utc(c.year, c.month, c.monthDay, c.hour, c.minute) - now) / 900 + 0.5) * 900
+end
+
+-- Which rules apply: US region realms between UTC-10 and UTC-3 (not Oceanic or Brazil), EU region realms.
+local function rulesFor(offset)
+  local region = ns.try(GetCurrentRegion)
+  if region == 1 and offset <= -3 * 3600 and offset >= -10 * 3600 then
+    -- Brazil realms (UTC-3 all year) keep one time; no US time zone sits there. Latin America realms (UTC-6 all
+    -- year) can't be told from US Central by the clock alone and get US rules: an hour out in US summer there.
+    if offset == -3 * 3600 then return nil end
+    return RULES.us
+  end
+  if region == 3 then return RULES.eu end
+  return nil
+end
+
+-- UTC seconds -> the realm's { year, month, day, hour, min } at that time.
+local function realmDateAt(t, now, offset)
+  local rule = rulesFor(offset)
+  if not rule then return date("!*t", t + offset) end
+  -- On summer time now (asked with the standard offset that would mean), today's offset is an hour ahead of standard.
+  local std = offset - (rule(now, offset - 3600) and 3600 or 0)
+  return date("!*t", t + std + (rule(t, std) and 3600 or 0))
+end
+ns.realmDateAt = realmDateAt -- for the test harness
+
+local function realmDate(t) return realmDateAt(t, ns.now(), currentOffset()) end
 
 -- Looks through one day for a guild event with this title starting at this minute. Returns the day event's index
 -- with the month already selected (monthOffset 0), or nil.

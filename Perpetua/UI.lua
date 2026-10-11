@@ -5,7 +5,7 @@ local _, ns = ...
 local safe, try, T = ns.safe, ns.try, ns.T
 
 local READY = "|TInterface\\RaidFrame\\ReadyCheck-Ready:15|t"
-local NOT_READY = "|cff4a5270—|r"
+local NOT_READY = "|cff7a8298—|r"
 local ROW_H = 26
 
 local main, tabs, pages, current = nil, {}, {}, nil
@@ -75,13 +75,14 @@ local function List(parent, cols, onSort)
   local child = CreateFrame("Frame", nil, scroll)
   child:SetSize(x, 1)
   scroll:SetScrollChild(child)
-  L.child = child
+  L.child, L.scroll = child, scroll
 
+  -- Only the rows that fit on screen exist (plus one); scrolling moves them and fills them with the rows now in
+  -- view. A guild of 500 costs ~20 frames and ~20 rows of text per redraw instead of 500.
   local function row(i)
     if L.rows[i] then return L.rows[i] end
     local r = CreateFrame("Button", nil, child)
     r:SetHeight(ROW_H)
-    r:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
     r:SetPoint("RIGHT", child, "RIGHT")
     -- Thin separators instead of stripes; a soft gold wash on hover.
     local sep = T.fill(r, "BACKGROUND", T.C.gold, 0.08)
@@ -115,29 +116,55 @@ local function List(parent, cols, onSort)
     return r
   end
 
+  local function fill(r, d, index)
+    r:ClearAllPoints()
+    r:SetPoint("TOPLEFT", 0, -(index - 1) * ROW_H)
+    r:SetPoint("RIGHT", child, "RIGHT")
+    if r.data == d and r.index == index then r:Show() return end -- already showing this row
+    r.data, r.index = d, index
+    for c = 1, #cols do
+      local v = d.cells[c]
+      if r.pills[c] then
+        r.cells[c]:SetText("")
+        r.pills[c]:SetShown(type(v) == "table" and v[1] ~= nil and v[1] ~= "")
+        if type(v) == "table" then r.pills[c]:Set(v[1], v[2]) end
+      else
+        r.cells[c]:SetText(v or "")
+      end
+    end
+    r.bar:SetShown(d.bar ~= nil)
+    if d.bar then r.bar:SetVertexColor(d.bar[1], d.bar[2], d.bar[3], 1) end
+    r.selFill:SetShown(d.selected and true or false)
+    r.selEdge:SetAlpha(d.selected and 0.55 or 0)
+    r:Show()
+  end
+
+  -- Rows in view for the current scroll position.
+  local function layout()
+    local data = L.data or {}
+    local height = scroll:GetHeight() or 0
+    if height <= 0 then height = 600 end
+    local first = math.max(1, math.floor((scroll:GetVerticalScroll() or 0) / ROW_H) + 1)
+    local count = math.ceil(height / ROW_H) + 1
+    local used = 0
+    for index = first, math.min(#data, first + count - 1) do
+      used = used + 1
+      fill(row(used), data[index], index)
+    end
+    for i = used + 1, #L.rows do L.rows[i]:Hide(); L.rows[i].data = nil; L.rows[i].index = nil end
+  end
+  scroll:HookScript("OnVerticalScroll", layout)
+  scroll:HookScript("OnSizeChanged", layout)
+
   function L:SetRows(data)
     child:SetWidth(math.max(scroll:GetWidth() or 0, 1))
-    for i, d in ipairs(data) do
-      local r = row(i)
-      r.data = d
-      for c = 1, #cols do
-        local v = d.cells[c]
-        if r.pills[c] then
-          r.cells[c]:SetText("")
-          r.pills[c]:SetShown(type(v) == "table" and v[1] ~= nil and v[1] ~= "")
-          if type(v) == "table" then r.pills[c]:Set(v[1], v[2]) end
-        else
-          r.cells[c]:SetText(v or "")
-        end
-      end
-      r.bar:SetShown(d.bar ~= nil)
-      if d.bar then r.bar:SetVertexColor(d.bar[1], d.bar[2], d.bar[3], 1) end
-      r.selFill:SetShown(d.selected and true or false)
-      r.selEdge:SetAlpha(d.selected and 0.55 or 0)
-      r:Show()
-    end
-    for i = #data + 1, #L.rows do L.rows[i]:Hide(); L.rows[i].data = nil end
+    L.data = data
+    -- New data: every visible row is filled again (the tables are new, so the "already showing" check misses).
     child:SetHeight(math.max(1, #data * ROW_H))
+    -- Fewer rows than before can leave the scroll past the end.
+    local maxScroll = math.max(0, #data * ROW_H - (scroll:GetHeight() or 0))
+    if (scroll:GetVerticalScroll() or 0) > maxScroll then scroll:SetVerticalScroll(maxScroll) end
+    layout()
   end
   return L
 end
@@ -549,20 +576,35 @@ local function buildCrafters(page)
   crafters.list = List(area, { { "Recipe", 300 }, { "Profession", 120 }, { "Who can make it", 280 } })
 end
 
--- recipe name -> { prof, item, spell, people }, built from everyone's (packed) recipes when the page is shown and
--- rebuilt only when someone's recipes change; let go when the window closes (crafters.index = nil in OnHide).
+-- One player's recipes as a flat list { n, prof, it, id }, unpacked once per recipes version (rec.rv): when
+-- someone's recipes change, only theirs are unpacked again.
+local function playerRecipes(name, rec)
+  crafters.byPlayer = crafters.byPlayer or {}
+  local key = rec.rv or rec.recipes or rec.rz
+  local cached = crafters.byPlayer[name]
+  if cached and cached.key == key then return cached.list end
+  local list = {}
+  local recipes = ns.recipesOf(rec)
+  for prof, saved in pairs(type(recipes) == "table" and recipes or {}) do
+    for _, r in ipairs(type(saved) == "table" and saved.list or {}) do
+      if r.n then list[#list + 1] = { n = r.n, prof = prof, it = r.it, id = r.id } end
+    end
+  end
+  crafters.byPlayer[name] = { key = key, list = list }
+  return list
+end
+
+-- recipe name -> { prof, item, spell, people }, built when the page is shown and rebuilt only when someone's
+-- recipes change; let go when the window closes (OnHide).
 local function craftersIndex()
   if crafters.index and crafters.indexAt == (ns.recipesChanged or 0) then return crafters.index, crafters.count end
   local index, count = {}, 0
   for name, rec in pairs(ns.players()) do
-    local recipes = ns.recipesOf(rec)
-    for prof, saved in pairs(type(recipes) == "table" and recipes or {}) do
-      for _, r in ipairs(type(saved) == "table" and saved.list or {}) do
-        if r.n then
-          local e = index[r.n]
-          if not e then e = { prof = prof, item = r.it, spell = r.id, people = {} }; index[r.n] = e; count = count + 1 end
-          e.people[#e.people + 1] = name
-        end
+    if type(rec) == "table" then
+      for _, r in ipairs(playerRecipes(name, rec)) do
+        local e = index[r.n]
+        if not e then e = { prof = r.prof, item = r.it, spell = r.id, people = {} }; index[r.n] = e; count = count + 1 end
+        e.people[#e.people + 1] = name
       end
     end
   end
@@ -754,6 +796,7 @@ local function showNewRaid()
   f.title:SetText(ns.RAIDS[1][1])
   f.time:SetText("20:00"); f.hours:SetText("3"); f.size:SetText(tostring(ns.RAIDS[1][2])); f.notes:SetText("")
   f:Update()
+  f:SetScale(T.scale())
   f:ClearAllPoints()
   f:SetPoint("CENTER", 0, 60)
   f:Show()
@@ -772,9 +815,10 @@ local function buildCalendar(page)
   cal.gcButton = T.button(tools, "Add", 80, function() ns.gameCalStep() end)
   cal.gcButton:SetPoint("TOPRIGHT", -8, -6)
   cal.gcButton:SetScript("OnEnter", function(self)
-    if not self.tip then return end
+    local tip = self.why or self.tip -- greyed out: why; otherwise what a click does
+    if not tip then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText(self.tip, 1, 1, 1, 1, true)
+    GameTooltip:SetText(tip, 1, 1, 1, 1, true)
     GameTooltip:Show()
   end)
   cal.gcButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -870,11 +914,13 @@ local function renderCalendar()
     else
       cal.gcText:SetText(C_Calendar and color(T.HEX.muted, "Guild calendar is up to date.") or "")
     end
-    cal.gcButton:SetShown(st ~= nil and st.button ~= nil)
-    if st and st.button then
-      cal.gcButton.label:SetText(st.button:upper())
-      cal.gcButton.tip = "One change per click: Blizzard's calendar takes one at a time."
-    end
+    -- Always there for officers; greyed out when there's nothing to do (or a change is on its way).
+    cal.gcButton:SetShown(C_Calendar ~= nil)
+    cal.gcButton.label:SetText(st and st.button and st.button:upper() or "ADD")
+    cal.gcButton.tip = "One change per click: Blizzard's calendar takes one at a time."
+    cal.gcButton:SetUsable(st ~= nil and st.button ~= nil,
+      st and (st.text:find("…") and "Wait a moment: the guild calendar is busy." or "Nothing to change right now.")
+        or "Every raid is on the guild calendar.")
   end
 
   local C = cal.canvas
@@ -1459,7 +1505,7 @@ local function renderOlympus()
     if c.key == "notify" then c.check:SetChecked(db.notify and true or false) else c.check:SetChecked(db.opts[c.key] ~= false) end
     local on = db.on and not (c.parent and db.opts[c.parent] == false)
     c.check:SetEnabled(on and true or false)
-    local a = on and 1 or 0.45
+    local a = on and 1 or T.DISABLED_ALPHA
     c.label:SetAlpha(a); c.hint:SetAlpha(a)
   end
   oly.known:SetText(O.knownCount())
@@ -1495,7 +1541,7 @@ if not ns.FORUMS then
 end
 
 local NAV = {
-  Guild = { "INV_BannerPVP_02", "Everyone in the guild: ranks, notes, specs, gear and professions" },
+  Guild = { "INV_BannerPVP_02", "Ranks, notes, specs, gear and professions" }, -- short: the numbers sit beside it
   ["Guild Info"] = { "INV_Misc_Note_01", "Message of the day, guild information and the guild log" },
   Character = { "INV_Chest_Plate16", "Gear, talents, professions and more" },
   Calendar = { "INV_Misc_PocketWatch_01", "Upcoming raids and who's coming" },
@@ -1511,8 +1557,9 @@ local NAV = {
 
 -- Big numbers in the page header (the site's "42 characters on the roster"). A page's renderer calls
 -- ns.setStats({ { 42, "members" }, { 12, "online", "ok" } }); pages that don't, show none.
+local SUBTITLE_X, STATS_RIGHT = 196 + 26 + 150 + 12, 1020 - 26 -- where the subtitle starts / the numbers end
 local function setStats(list)
-  local x = 0
+  local used = 0 -- width the numbers take, so the subtitle beside the rule stops short of them
   for i = #main.stats, 1, -1 do main.stats[i].n:Hide(); main.stats[i].l:Hide() end
   local prev
   for i = #(list or {}), 1, -1 do
@@ -1531,8 +1578,11 @@ local function setStats(list)
     if prev then st.l:SetPoint("BOTTOMRIGHT", prev, "BOTTOMLEFT", -24, 2) else st.l:SetPoint("BOTTOMRIGHT", main, "TOPRIGHT", -26, -112) end
     st.n:SetPoint("BOTTOMRIGHT", st.l, "BOTTOMLEFT", -7, -2)
     st.n:Show(); st.l:Show()
+    used = used + (prev and 24 or 0) + (st.n:GetStringWidth() or 0) + 7 + (st.l:GetStringWidth() or 0)
     prev = st.n
   end
+  -- A long subtitle ends in "…" before the numbers instead of running under them.
+  main.subtitle:SetWidth(math.max(40, STATS_RIGHT - (used > 0 and (used + 20) or 0) - SUBTITLE_X))
   main.statsSet = true
 end
 function ns.setStats(list) if main then setStats(list) end end
@@ -1542,9 +1592,15 @@ local TOP, SIDE = 62, 196 -- top bar height, sidebar width
 local function build()
   main = CreateFrame("Frame", "PerpetuaFrame", UIParent)
   -- Closed: let go of what only the open window needed.
-  main:SetScript("OnHide", function() crafters.index = nil end)
+  main:SetScript("OnHide", function() crafters.index, crafters.byPlayer = nil, nil end)
   main:SetSize(1020, 640)
+  main:SetScale(T.scale())
   main:SetPoint("CENTER")
+  -- Ctrl + mouse wheel anywhere on the window (outside the scrolling lists) makes it bigger or smaller.
+  main:EnableMouseWheel(true)
+  main:SetScript("OnMouseWheel", function(_, delta)
+    if IsControlKeyDown() then ns.setScale(T.scale() + (delta > 0 and 0.05 or -0.05), true) end
+  end)
   main:SetFrameStrata("HIGH")
   main:SetMovable(true)
   main:EnableMouse(true)
@@ -1663,7 +1719,7 @@ local function build()
   local X = SIDE + 26
   main.title = T.text(main, "title"); main.title:SetPoint("TOPLEFT", X, -(TOP + 18))
   main.rule = T.rule(main); main.rule:SetPoint("TOPLEFT", main.title, "BOTTOMLEFT", 0, -6); main.rule:SetWidth(150)
-  main.subtitle = T.text(main, "muted"); main.subtitle:SetPoint("LEFT", main.rule, "RIGHT", 12, 0)
+  main.subtitle = T.text(main, "muted"); main.subtitle:SetPoint("LEFT", main.rule, "RIGHT", 12, 0) -- width: setStats
   main.status = T.text(main, "muted", "RIGHT"); main.status:SetPoint("BOTTOMRIGHT", main, "TOPRIGHT", -26, -112) -- errors only
 
   for _, t in ipairs(TABS) do
@@ -1728,6 +1784,27 @@ function ns.showTab(name)
   ns.refreshUI(true)
 end
 
+-- The window's size (T.scale). It stays centred where it was, and open pop-ups follow.
+function ns.setScale(value, quiet)
+  value = math.floor((tonumber(value) or 1) * 20 + 0.5) / 20
+  value = math.max(T.SCALE_MIN, math.min(T.SCALE_MAX, value))
+  PerpetuaDB.scale = value ~= 1 and value or nil
+  if main then
+    local x, y = main:GetCenter()
+    local before = main:GetScale()
+    main:SetScale(value)
+    if x and y and before then
+      main:ClearAllPoints()
+      main:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x * before / value, y * before / value)
+    end
+  end
+  for _, name in ipairs({ "PerpetuaDialog", "PerpetuaCopyBox", "PerpetuaNewRaid" }) do
+    local f = _G[name]
+    if f and f:IsShown() then f:SetScale(value) end
+  end
+  if not quiet then print("|cffd4af37Perpetua|r: window size " .. math.floor(value * 100 + 0.5) .. "%.") end
+end
+
 -- WoW only writes saved variables on logout or a UI reload, so "saving" for the Perpetua app means reloading.
 -- Asked first (it closes everything for a few seconds), and not in combat.
 function ns.saveAndReload()
@@ -1772,6 +1849,7 @@ function ns.refreshUI(now)
 end
 ns.fire = function() ns.refreshUI() end
 function ns.currentTabForTest() return current end -- for the test harness
+ns.uiForTest = { char = char, cal = cal }
 
 function ns.toggle(tab)
   if main and main:IsShown() and (not tab or tab == current) then main:Hide() return end

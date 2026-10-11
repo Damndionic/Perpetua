@@ -1,5 +1,6 @@
 -- The site's look in game: gold linework on deep royal navy, Cinzel for headings and buttons, Cormorant
--- Garamond for text (both SIL Open Font License, in Media/Fonts), the crest and the corner brackets from
+-- Garamond for text (both SIL Open Font License, in Media/Fonts; the Cormorant files are cut down to Latin, Cyrillic
+-- and common symbols to keep the download small), the crest and the corner brackets from
 -- perpetua.css. Everything is drawn with plain textures, so it doesn't depend on Blizzard's frame art.
 local _, ns = ...
 local T = {}
@@ -38,20 +39,31 @@ T.fonts = {
   small   = font("PerpetuaFontSmall", "CormorantGaramond-SemiBold.ttf", 15, C.text, GameFontHighlightSmall),
   muted   = font("PerpetuaFontMuted", "CormorantGaramond-SemiBoldItalic.ttf", 14, C.muted, GameFontDisableSmall),
   tagline = font("PerpetuaFontTagline", "CormorantGaramond-SemiBoldItalic.ttf", 14, C.warm, GameFontNormalSmall),
-  close   = font("PerpetuaFontClose", "CormorantGaramond-Bold.ttf", 28, C.warm, GameFontNormalLarge),
+  close   = font("PerpetuaFontClose", "CormorantGaramond-SemiBold.ttf", 30, C.warm, GameFontNormalLarge),
   brand   = font("PerpetuaFontBrand", "Cinzel-Bold.ttf", 17, C.gold, GameFontNormalLarge),
   page    = font("PerpetuaFontPage", "Cinzel-Bold.ttf", 21, C.gold, GameFontNormalLarge),
   nav     = font("PerpetuaFontNav", "Cinzel-SemiBold.ttf", 11, C.text, GameFontNormal),
-  group   = font("PerpetuaFontGroup", "Cinzel-SemiBold.ttf", 9, C.dim, GameFontNormalSmall),
+  group   = font("PerpetuaFontGroup", "Cinzel-SemiBold.ttf", 10, C.dim, GameFontNormalSmall),
   stat    = font("PerpetuaFontStat", "Cinzel-Bold.ttf", 26, C.pale, GameFontNormalLarge),
   hero    = font("PerpetuaFontHero", "Cinzel-Bold.ttf", 28, C.text, GameFontNormalLarge),
-  badge   = font("PerpetuaFontBadge", "Cinzel-SemiBold.ttf", 9, C.muted, GameFontNormalSmall),
+  badge   = font("PerpetuaFontBadge", "Cinzel-SemiBold.ttf", 10, C.muted, GameFontNormalSmall),
   badgeValue = font("PerpetuaFontBadgeValue", "Cinzel-Bold.ttf", 12, C.pale, GameFontNormalSmall),
   lvl     = font("PerpetuaFontLevel", "Cinzel-SemiBold.ttf", 11, C.pale, GameFontNormalSmall),
   surname = font("PerpetuaFontSurname", "CormorantGaramond-SemiBoldItalic.ttf", 17, C.muted, GameFontDisable),
 }
 
 function T.hex(key, s) return "|cff" .. (T.HEX[key] or key) .. s .. "|r" end
+
+-- How faded something greyed out is: still readable (about 3.4:1 for gold on navy), clearly not active.
+T.DISABLED_ALPHA = 0.55
+
+-- The window's size setting (Options > AddOns > Perpetua, /ppta scale, Ctrl + mouse wheel on the window): the
+-- Perpetua window and its pop-ups are drawn at this scale. 1 = as designed.
+T.SCALE_MIN, T.SCALE_MAX = 0.7, 1.5
+function T.scale()
+  local s = tonumber(PerpetuaDB and PerpetuaDB.scale) or 1
+  return math.max(T.SCALE_MIN, math.min(T.SCALE_MAX, s))
+end
 
 function T.text(parent, fontKey, justify)
   local fs = parent:CreateFontString(nil, "OVERLAY")
@@ -301,7 +313,7 @@ function T.button(parent, label, width, onClick, kind)
   function b:SetUsable(on, why)
     on = on and true or false
     self:SetEnabled(on)
-    self:SetAlpha(on and 1 or 0.4)
+    self:SetAlpha(on and 1 or T.DISABLED_ALPHA)
     self.why = not on and why or nil
   end
   b:HookScript("OnEnter", function(self)
@@ -440,6 +452,7 @@ function T.copyBox(title, url)
     copyBox = f
   end
   copyBox.url = url
+  copyBox:SetScale(T.scale())
   copyBox.title:SetText((title or "Open on the site"):upper())
   copyBox.field:SetText(url)
   copyBox:Show()
@@ -519,6 +532,7 @@ function T.dialog(opts)
     dialog = f
   end
   local f = dialog
+  f:SetScale(T.scale())
   f.onAccept = opts.onAccept
   f.command = opts.command
   -- okUsable(text): the confirm button stays greyed until the input is right (okWhy says what's missing). A dialog

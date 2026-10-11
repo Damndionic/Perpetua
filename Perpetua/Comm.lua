@@ -24,8 +24,12 @@ ns.session = { heard = {}, sent = 0, received = 0 }
 -- ---------- storage ----------
 
 -- Players are kept per guild, so an alt in another guild doesn't mix the lists.
+-- Asked many times per redraw (every ns.players() call): read once per frame (GetTime is the same within one).
+local guildNameAt, guildNameValue = nil, nil
 function ns.guildName()
-  return ns.text(ns.try(GetGuildInfo, "player"))
+  local now = GetTime()
+  if now ~= guildNameAt then guildNameAt, guildNameValue = now, ns.text(ns.try(GetGuildInfo, "player")) end
+  return guildNameValue
 end
 
 function ns.players(guild)
