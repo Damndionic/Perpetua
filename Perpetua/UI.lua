@@ -766,7 +766,7 @@ local function showNewRaid()
       self.weeks.value:SetText(self.w == 1 and "Just once" or ("Weekly, " .. self.w .. " weeks"))
       local t, why = self:Start()
       self.hint:SetText(why or ("The raid goes to " .. ns.SITE .. " with the next guild sync, then to Discord and everyone's addon. "
-        .. "Create & sync reloads your UI so it leaves now."))
+        .. "Create & sync then asks to reload your UI so it leaves now."))
     end
     local function create(reload)
       local t, why = f:Start()
@@ -781,7 +781,7 @@ local function showNewRaid()
       if not ok then f.hint:SetText(color("e06666", err)) return end
       f:Hide()
       ns.refreshUI(true)
-      if reload then ReloadUI() end
+      if reload then ns.saveAndReload() end -- the reload itself needs a click on its own button
     end
     f.cancel = T.button(f, "Cancel", 100, function() f:Hide() end, "tab")
     f.cancel:SetPoint("BOTTOMRIGHT", -22, 18)
@@ -1811,15 +1811,20 @@ end
 
 -- WoW only writes saved variables on logout or a UI reload, so "saving" for the Perpetua app means reloading.
 -- Asked first (it closes everything for a few seconds), and not in combat.
+-- The game refuses ReloadUI from addon code ("Interface action failed because of an AddOn", seen in 2.16 testing),
+-- so the Reload button is a secure click that runs Blizzard's own /reload, like the guild buttons
+-- (GuildTakeover.lua). Your profile is read when the dialog opens: after the click there's no time left.
 function ns.saveAndReload()
   if InCombatLockdown() then
     print("|cffd4af37Perpetua|r: Save & reload waits until you're out of combat.")
     return
   end
+  ns.refreshSelf(true)
+  local slash = type(SLASH_RELOAD1) == "string" and SLASH_RELOAD1:match("^/%S+$") or "/reload"
   T.dialog({
     title = "Save & reload", accept = "Reload",
     text = "Reloads your UI so WoW saves your profile and the guild's data for the Perpetua app, and loads the newest raid calendar. It takes a few seconds.",
-    onAccept = function() ns.refreshSelf(true); ReloadUI() end,
+    command = function() return slash end,
   })
 end
 

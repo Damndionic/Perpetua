@@ -118,7 +118,7 @@ SlashCmdList.PERPETUA = function(msg)
     print("|cffd4af37Perpetua|r commands (/perpetua, /perp or /ppta):")
     for _, h in ipairs(HELP) do print("  |cfff2d78c/ppta" .. (h[1] ~= "" and (" " .. h[1]) or "") .. "|r  " .. h[2]) end
   elseif msg == "export" then ns.showTab("Export"); ns.renderExport(true)
-  elseif msg == "sync" then ns.refreshSelf(true); ReloadUI()
+  elseif msg == "sync" then ns.saveAndReload() -- asks; the reload is a click on its button (the game blocks addons reloading)
   elseif msg == "attune" or msg == "attunements" then ns.showTab("Attunements")
   elseif msg == "raids" or msg == "calendar" then ns.showTab("Calendar")
   elseif msg == "loot" then ns.showTab("Loot")

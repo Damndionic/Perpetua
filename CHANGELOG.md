@@ -4,6 +4,7 @@
 
 - **Guild Chat** page (in the sidebar under Guild): the guild chat log Blizzard's guild window has, history from before you logged in included, with an **Officer** tab for officers. Names are clickable (click to whisper, right-click for the member menu), item links show their tooltip, and **Older messages** loads more history. Type in the box at the bottom and press Enter to send. If the game won't let the addon send from there, the message goes into your normal chat box with /g (or /o) in front, and Enter sends it.
 - A count on Guild Chat in the sidebar shows new messages since you last looked.
+- **Save & reload** works again: the game had started refusing the addon's reload ("Interface action failed because of an AddOn"). The Reload button now runs the game's own /reload. New raid's "Create & sync" and `/ppta sync` ask the same way.
 
 ## 2.15.0
 
