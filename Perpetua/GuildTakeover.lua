@@ -97,8 +97,12 @@ for _, b in ipairs({ blizzard, action }) do
   b:SetScript("OnEnter", onEnter)
   b:SetScript("OnLeave", onLeave)
 end
--- The Perpetua window steps aside so Blizzard's has the screen.
-blizzard:SetScript("PreClick", function() if hoverSecure == blizzard and PerpetuaFrame then PerpetuaFrame:Hide() end end)
+-- The Perpetua window steps aside so Blizzard's has the screen. Only after the click has gone through: hiding it
+-- sooner (on the mouse-down) hides our button, which parks this one before the mouse-up that opens the window.
+blizzard:SetScript("PostClick", function(_, _, down)
+  if down then return end
+  if hoverSecure == blizzard and PerpetuaFrame then PerpetuaFrame:Hide() end
+end)
 -- After a guild command: whatever our button wants to do next (close a dialog, refresh the roster). If the mouse is
 -- still on our button once the roster has updated, it's armed again with the new command (promote twice in a row).
 local rearm
