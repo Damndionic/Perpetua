@@ -18,6 +18,9 @@ Everyone in the guild, with or without the addon: level, rank, spec, item level,
 **Guild window** *(optional: the switch at the top of the window, or `/ppta guildui`)*
 Makes the guild key (J) and the guild button open Perpetua instead of Blizzard's guild window (hold Shift for Blizzard's). Click a member for their panel: whisper, invite, promote and demote one rank at a time, view their profile, make leader, remove. Notes, the message of the day and guild info open Blizzard's guild window, and **Guild Control** opens Blizzard's rank and permission settings: the game only lets its own UI change those, so the addon hands you straight to it. Guild actions work out of combat.
 
+**Guild Chat**
+The guild chat log from Blizzard's guild window, history included, with an Officer tab for officers. Click a name to whisper, right-click for the member menu, and type below to send.
+
 **Guild Info**
 The message of the day, the guild information and the guild event log.
 

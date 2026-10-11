@@ -214,6 +214,14 @@ local function memberMenu(owner, m)
   end)
 end
 
+-- The right-click menu for a member by name (the Guild Chat page's names). Returns false if they aren't on the roster.
+function ns.guildMemberMenu(owner, name)
+  for _, m in ipairs(members()) do
+    if m.name == name then memberMenu(owner, m) return true end
+  end
+  return false
+end
+
 -- ---------- member panel ----------
 
 

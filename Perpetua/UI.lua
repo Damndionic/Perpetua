@@ -1524,6 +1524,7 @@ end
 -- The sidebar, in groups: the guild, you, and reference pages.
 local TABS = {
   { "Guild", buildGuild, renderGuild, group = "Guild" },
+  { "Guild Chat", function(page) ns.buildGuildChat(page) end, function() ns.renderGuildChat() end, group = "Guild" }, -- GuildChat.lua
   { "Guild Info", function(page) ns.buildGuildInfo(page) end, function() ns.renderGuildInfo() end, group = "Guild", newGuild = true }, -- with the New guild window
   { "Calendar", buildCalendar, renderCalendar, group = "Guild" },
   { "Loot", buildLoot, renderLoot, group = "Guild" },
@@ -1542,6 +1543,7 @@ end
 
 local NAV = {
   Guild = { "INV_BannerPVP_02", "Ranks, notes, specs, gear and professions" }, -- short: the numbers sit beside it
+  ["Guild Chat"] = { "INV_Scroll_03", "Guild and officer chat, with the history" },
   ["Guild Info"] = { "INV_Misc_Note_01", "Message of the day, guild information and the guild log" },
   Character = { "INV_Chest_Plate16", "Gear, talents, professions and more" },
   Calendar = { "INV_Misc_PocketWatch_01", "Upcoming raids and who's coming" },
@@ -1586,6 +1588,8 @@ local function setStats(list)
   main.statsSet = true
 end
 function ns.setStats(list) if main then setStats(list) end end
+-- Guild Chat's sidebar count: messages since the page was last open.
+function ns.setChatUnread(n) if tabs["Guild Chat"] then tabs["Guild Chat"]:SetCount(n) end end
 
 local TOP, SIDE = 62, 196 -- top bar height, sidebar width
 
@@ -1770,7 +1774,7 @@ function ns.showTab(name)
           lastGroup = t.group
         end
         b:ClearAllPoints(); b:SetPoint("TOPLEFT", main.side, "TOPLEFT", 0, y); b:SetPoint("RIGHT", main.side, "RIGHT", -1, 0)
-        y = y - 34
+        y = y - T.NAV_H
       end
     end
   end

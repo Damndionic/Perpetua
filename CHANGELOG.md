@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.16.0
+
+- **Guild Chat** page (in the sidebar under Guild): the guild chat log Blizzard's guild window has, history from before you logged in included, with an **Officer** tab for officers. Names are clickable (click to whisper, right-click for the member menu), item links show their tooltip, and **Older messages** loads more history. Type in the box at the bottom and press Enter to send. If the game won't let the addon send from there, the message goes into your normal chat box with /g (or /o) in front, and Enter sends it.
+- A count on Guild Chat in the sidebar shows new messages since you last looked.
+
 ## 2.15.0
 
 - **Window size**: make the window bigger or smaller with Ctrl + mouse wheel on it, `/ppta scale 70`–`150`, or the slider in Options > AddOns > Perpetua. Its pop-ups follow.

@@ -193,11 +193,14 @@ function T.icon(parent, path, size)
   return holder
 end
 
+-- 32: ten entries in three groups fit above the sync card (6 + 3 x 28 + 10 x 32 = 410 of 431px).
+T.NAV_H = 32
+
 -- Sidebar entry: icon and label; hover glows, the selected one gets a gold bar and a gold wash fading to the right.
 -- b:SetCount(n) shows a small gold count (upcoming raids).
 function T.navButton(parent, label, iconPath, onClick)
   local b = CreateFrame("Button", nil, parent)
-  b:SetHeight(34)
+  b:SetHeight(T.NAV_H)
   b.wash = T.gradient(b, "BACKGROUND", "HORIZONTAL", C.gold, 0.22, C.gold, 0)
   b.wash:SetAllPoints()
   b.bar = T.fill(b, "ARTWORK", C.gold, 1)
@@ -372,6 +375,7 @@ function T.searchBox(parent, width, placeholder, onChange)
   e:SetScript("OnEditFocusLost", function() edge:SetAlpha(0.4); sync() end)
   e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   e:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+  function e:SetPlaceholder(text) hint:SetText(text or "") end
   return e
 end
 
