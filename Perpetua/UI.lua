@@ -170,15 +170,17 @@ local function Canvas(parent, layout)
   end
   function C:Col(n) self.col = n end
   function C:Gap(h) self.y[self.col] = self.y[self.col] + (h or 10) end
-  -- text, font key (Theme fonts), link (hyperlink for the tooltip), indent
-  function C:Line(text, fontKey, link, indent)
+  -- text, font key (Theme fonts), link (hyperlink for the tooltip), indent, right (short text kept at the right
+  -- edge: a long text is cut short before it, never the right text)
+  function C:Line(text, fontKey, link, indent, right)
     fontKey = fontKey or "body"
     self.used = self.used + 1
     local l = self.lines[self.used]
     if not l then
       l = CreateFrame("Button", nil, child)
       l.fs = T.text(l, "body")
-      l.fs:SetAllPoints()
+      l.right = T.text(l, "body", "RIGHT")
+      l.right:SetPoint("TOPRIGHT"); l.right:SetPoint("BOTTOMRIGHT")
       l:SetScript("OnEnter", function(b)
         if not b.link then return end
         GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
@@ -192,6 +194,12 @@ local function Canvas(parent, layout)
     l.fs:SetFontObject(T.fonts[fontKey])
     l.fs:SetWordWrap(false)
     l.fs:SetText(text)
+    l.right:SetFontObject(T.fonts[fontKey])
+    l.right:SetText(right or "")
+    l.right:SetShown(right ~= nil)
+    l.fs:ClearAllPoints()
+    l.fs:SetPoint("TOPLEFT"); l.fs:SetPoint("BOTTOMLEFT")
+    if right then l.fs:SetPoint("RIGHT", l.right, "LEFT", -8, 0) else l.fs:SetPoint("RIGHT") end
     local h = LINE_H[fontKey] or 20
     local col = self.col
     l:ClearAllPoints()
@@ -441,8 +449,8 @@ local function renderCharacter()
     local g = bySlot[slot[1]]
     if g then
       local q = ns.QUALITY[g.q or 1] or "ffffff"
-      C:Line(T.itemIcon(g.id, 17) .. color(q, safe(g.n or ("Item " .. g.id))) .. color(muted, "  " .. slot[2] .. (g.il and ("  " .. g.il) or "")),
-        "small", itemLink(g))
+      C:Line(T.itemIcon(g.id, 17) .. color(q, safe(g.n or ("Item " .. g.id))) .. color(muted, "  " .. slot[2]),
+        "small", itemLink(g), nil, g.il and color(muted, g.il) or nil)
       if g.en then C:Line(color("7fe07a", safe(g.en)), "muted", nil, 22) end
     end
   end

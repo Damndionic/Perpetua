@@ -3,6 +3,7 @@
 ## 2.14.0
 
 - Clicking a note (or "Blizzard's guild window") opens Blizzard's guild window again; 2.13.0 broke it.
+- Character gear: the item level sits at the right of each line, so a long item name no longer hides it.
 - **Save & reload** (was "Sync now") asks before reloading your UI and waits until you're out of combat.
 - The sidebar's **Character** always opens your own character, not whoever you last looked at.
 - Dialogs: one OK when there's nothing to confirm (Leave as Guild Master), and Disband stays greyed until you type DISBAND; pressing Enter where a click is needed says so.
