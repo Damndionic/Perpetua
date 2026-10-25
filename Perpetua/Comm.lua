@@ -396,6 +396,8 @@ local function onMessage(text, channel, sender)
     if newHere or wasAddon ~= rec.addon then ns.fire() end
   elseif kind == "L" or kind == "R" then
     ns.onLootMessage(f, from)
+  elseif kind == "A" then
+    ns.onAwardMessage(f, from)
   elseif kind == "Q" then
     if f[2] and f[3] and f[4] then asked[f[2] .. f[3] .. f[4]] = GetTime() end
     if f[2] == ns.selfName then sendPart(f[3]) end

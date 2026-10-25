@@ -554,6 +554,10 @@ function T.dialog(opts)
     end, nil, nil, function() f:Hide(); if C_GuildInfo and C_GuildInfo.GuildRoster then C_Timer.After(0.6, function() pcall(C_GuildInfo.GuildRoster) end) end end)
   end
   f.title:SetText((opts.title or ""):upper())
+  -- The width first: the body's height is measured at the width it will have (a stale width gave long text one line).
+  f:SetWidth(opts.width or 440)
+  f:ClearAllPoints()
+  f:SetPoint("CENTER", 0, 120)
   f.body:SetText(opts.text or "")
   f.ok.label:SetText((opts.accept or "OK"):upper())
   local input = opts.input

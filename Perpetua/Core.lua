@@ -100,7 +100,8 @@ local HELP = {
   { "link CODE", "save a link code from " .. ns.SITE .. "/member" },
   { "me", "your character" },
   { "raids", "the raid calendar" },
-  { "loot", "loot and roll history" },
+  { "loot", "loot: pity standings, history, the contested list" },
+  { "loot rules", "how loot works" },
   { "attune", "attunements" },
   { "crafters", "who can make what" },
   { "export", "your export for the site" },
@@ -122,6 +123,7 @@ SlashCmdList.PERPETUA = function(msg)
   elseif msg == "attune" or msg == "attunements" then ns.showTab("Attunements")
   elseif msg == "raids" or msg == "calendar" then ns.showTab("Calendar")
   elseif msg == "loot" then ns.showTab("Loot")
+  elseif msg == "loot rules" or msg == "lootrules" then ns.showTab("Loot"); ns.showLootRules()
   elseif ns.FORUMS and (msg == "forums" or msg == "forum") then ns.showTab("Forums")
   elseif msg == "craft" or msg == "crafters" then ns.showTab("Crafters")
   elseif msg == "minimap" then ns.toggleMinimapButton()

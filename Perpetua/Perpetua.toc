@@ -26,6 +26,7 @@ Roster.lua
 GuildUI.lua
 GuildChat.lua
 UI.lua
+LootMaster.lua
 Minimap.lua
 GuildTakeover.lua
 Core.lua
