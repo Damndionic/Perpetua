@@ -101,7 +101,7 @@ local HELP = {
   { "link CODE", "save a link code from " .. ns.SITE .. "/member" },
   { "me", "your character" },
   { "raids", "the raid calendar" },
-  { "loot", "loot: pity standings, history, the contested list" },
+  { "loot", "loot history: drops, rolls and council calls" },
   { "loot rules", "how loot works" },
   { "attune", "attunements" },
   { "professions", "who can make what, by profession (or /ppta crafters)" },

@@ -598,7 +598,7 @@ local function buildProfessions(page)
   local right = CreateFrame("Frame", nil, page)
   right:SetPoint("TOPLEFT", left, "TOPRIGHT", 16, 0); right:SetPoint("BOTTOMRIGHT")
   local search = T.searchBox(right, 240, "Search recipes…", function(t)
-    crafters.filter = t:lower(); crafters.jump = true; ns.refreshUI()
+    crafters.filter = t:lower(); crafters.jump = true; ns.refreshUI(true)
   end)
   search:SetPoint("TOPLEFT", 2, 0)
   crafters.hint = T.text(right, "muted")
@@ -730,7 +730,7 @@ local function renderProfessions()
       selected = p == crafters.prof,
       cells = { profIcon(p) .. (p == crafters.prof and color(T.HEX.pale, safe(p)) or safe(p)),
         n > 0 and color(T.HEX.gold, n) or color(T.HEX.dim, crafters.filter ~= "" and "0" or "–") },
-      onClick = function() crafters.prof, crafters.who = p, nil; ns.refreshUI() end,
+      onClick = function() crafters.prof, crafters.who = p, nil; ns.refreshUI(true) end, -- now, not the sync throttle
     }
   end
   crafters.profArea:SetHeight(24 + math.max(3, math.min(#profRows, 11)) * ROW_H)
@@ -767,7 +767,7 @@ local function renderProfessions()
       onClick = function(_, button)
         if button == "RightButton" then whisper(name) return end
         crafters.who = crafters.who ~= name and name or nil
-        ns.refreshUI()
+        ns.refreshUI(true)
       end,
       onEnter = function(row)
         GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
@@ -1157,145 +1157,49 @@ local function renderCalendar()
 end
 
 -- ---------- Loot tab ----------
--- Three views: Standings (everyone's pity bonus, yours on a card at the top), History (drops with the rolls and
--- how each was decided) and Contested (this phase's priority list). "How loot works" explains the rules.
+-- The loot history (drops with the rolls and how each was decided) and "How loot works": the rules from
+-- perpetua.gg/rules, in the same words.
 
-local loot = { filter = "", view = "Standings" }
-local VIEWS = { "Standings", "History", "Contested" }
-
-local function bonusText(b, capped)
-  if (b or 0) <= 0 then return color(T.HEX.dim, "+0") end
-  return color(capped and T.HEX.pale or T.HEX.gold, "+" .. b) .. (capped and color(T.HEX.muted, "  max") or "")
-end
+local loot = { filter = "" }
 
 local function firstName(n) return safe((n or ""):match("^(%S+)") or n) end
 
--- The rules in plain words, with this phase's numbers.
+-- Keep this in the site's words (src/loot-rules.html); the last section is how it runs in game.
 local function showLootRules()
-  local plan = ns.lootPlan() or {}
-  local step, cap = tonumber(plan.step) or ns.PITY_STEP, tonumber(plan.cap) or ns.PITY_CAP
   local g = function(s) return color(T.HEX.gold, s) end
+  local p = function(s) return color(T.HEX.pale, s) end
   local text = table.concat({
-    "Most drops are rolled, with a bonus that grows while you're unlucky. A few big items per raid follow a list the officers post ahead of time.",
+    p("We gear the people who'll be here next week."),
+    "Loot should make the raid stronger and reward the people who build it. These are the rules we raid by.",
     "",
-    g("ROLLS (MOST DROPS)"),
-    "Main spec: /roll 100. Off spec: /roll 99. Main spec goes first.",
-    "Every main-spec roll you lose adds +" .. step .. " to your next one, up to +" .. cap .. ". Win a main-spec item and you're back to +0. Off-spec rolls and BoEs don't change it.",
-    "Your bonus carries over from week to week and resets when a new phase opens. Alts roll after mains.",
+    g("I.  MAIN SPEC BEFORE OFF SPEC"),
+    "An upgrade for the spec you raid as always comes first. Off-spec rolls are open once no one needs the item for their main spec.",
     "",
-    g("THE CONTESTED LIST (3-5 ITEMS PER RAID)"),
-    "Officers post a priority order for the items that shape a season, with the reasons, before the phase starts. The first person in line who's in the raid gets it.",
-    "One contested item each until everyone on the list has one. You need about 75% attendance over 4 weeks to be on it. Missing a night doesn't cost you your spot.",
+    g("II.  LEGENDARIES & HIGH-VALUE ITEMS"),
+    "Legendaries and other high-value items are not rolled for. That covers the kind of drop that changes a raider's season (think " .. p("Deathbringer's Will") .. " in ICC) and rare, low drop-rate items that show up on several best-in-slot lists. Perpetua officers decide where they go, and they prioritize:",
+    color(T.HEX.gold, "–") .. " " .. p("Performance") .. ": players who know their class and show up prepared.",
+    color(T.HEX.gold, "–") .. " " .. p("Loyalty") .. ": raiders with steady attendance and time invested in the guild.",
     "",
-    g("HOW IT RUNS"),
-    "The loot master's Perpetua window posts each roll, adds your bonus and names the winner, so there's nothing to add up. Every award and roll goes to perpetua.gg/loot.",
-    "Leftovers are disenchanted for the guild bank.",
+    g("III.  NO GEAR-AND-GO"),
+    "We don't want someone joining on Tuesday, walking out with the best-in-slot trinket, and leaving on Wednesday. New raiders are welcome and will gear up, but the big-ticket items go to the people who have been here and plan to stay.",
+    "",
+    "Officer calls on loot are final. If you have a question or think something was missed, bring it to an officer privately after the raid, not in raid chat.",
+    color(T.HEX.warm, "Show up, play well, stick around, and the loot follows."),
+    "",
+    color(T.HEX.muted, "In the raid: main spec /roll 100, off spec /roll 99. The rules are also at " .. ns.SITE .. "/rules."),
   }, "\n")
-  T.dialog({ title = "How loot works" .. (plan.phase and (" · " .. safe(plan.phase)) or ""), text = text, width = 620 })
+  T.dialog({ title = "How loot works", text = text, width = 620 })
 end
 ns.showLootRules = showLootRules
 
 local function buildLoot(page)
-  loot.tabs = {}
-  local prev
-  for _, v in ipairs(VIEWS) do
-    local b = T.button(page, v, 110, function() loot.view = v; ns.refreshUI(true) end, "tab")
-    if prev then b:SetPoint("LEFT", prev, "RIGHT", 8, 0) else b:SetPoint("TOPLEFT", 2, 0) end
-    loot.tabs[v] = b
-    prev = b
-  end
+  loot.search = T.searchBox(page, 260, "Search items or players…", function(t) loot.filter = t:lower(); ns.refreshUI(true) end)
+  loot.search:SetPoint("TOPLEFT", 2, 0)
   loot.rules = T.button(page, "How loot works", 150, showLootRules, "tab")
   loot.rules:SetPoint("TOPRIGHT", -26, 0)
-  loot.search = T.searchBox(page, 220, "Search items or players…", function(t) loot.filter = t:lower(); ns.refreshUI(true) end)
-  loot.search:SetPoint("RIGHT", loot.rules, "LEFT", -12, 0)
-  loot.hint = T.text(page, "muted", "RIGHT")
-  loot.hint:SetPoint("RIGHT", loot.rules, "LEFT", -12, 0)
-
-  -- Your card (Standings): the bonus big, what it means for your next roll, your last win.
-  local card = CreateFrame("Frame", nil, page)
-  card:SetPoint("TOPLEFT", 0, -38); card:SetPoint("RIGHT", -26, 0); card:SetHeight(66)
-  T.panel(card)
-  card.label = T.text(card, "label"); card.label:SetPoint("TOPLEFT", 16, -12); card.label:SetText("YOUR PITY")
-  card.big = T.text(card, "stat"); card.big:SetPoint("TOPLEFT", 16, -26)
-  card.meter = T.meter(card); card.meter:SetPoint("LEFT", card.big, "RIGHT", 14, 0); card.meter:SetWidth(120)
-  card.line1 = T.text(card, "body"); card.line1:SetPoint("TOPLEFT", card.meter, "TOPRIGHT", 18, 16); card.line1:SetPoint("RIGHT", -16, 0)
-  card.line2 = T.text(card, "muted"); card.line2:SetPoint("TOPLEFT", card.line1, "BOTTOMLEFT", 0, -4); card.line2:SetPoint("RIGHT", -16, 0)
-  loot.card = card
-
-  local function area(top)
-    local a = CreateFrame("Frame", nil, page)
-    a:SetPoint("TOPLEFT", 0, top)
-    a:SetPoint("BOTTOMRIGHT")
-    return a
-  end
-  loot.standingsArea = area(-114)
-  loot.standings = List(loot.standingsArea, { { "Name", 170 }, { "Pity bonus", 90 }, { "Lost", 40, "RIGHT" },
-    { "Last main-spec win", 230 }, { "Contested", 80 }, { "Attend.", 60, "RIGHT" } }, function(i) loot.sort = i; ns.refreshUI(true) end)
-  loot.historyArea = area(-38)
-  loot.history = List(loot.historyArea, { { "When", 84 }, { "Item", 220 }, { "Winner", 130 }, { "How", 130 }, { "Rolls", 196 } })
-  loot.contestedArea = area(-38)
-  loot.contested = List(loot.contestedArea, { { "Item", 220 }, { "Raid", 110 }, { "Priority", 300 }, { "Why", 150 } })
-end
-
-local function renderStandings()
-  local plan = ns.lootPlan()
-  local st = ns.pityStandings()
-  local cap = plan and tonumber(plan.cap) or ns.PITY_CAP
-  local step = plan and tonumber(plan.step) or ns.PITY_STEP
-  local items = {}
-  for _, c in ipairs(plan and plan.contested or {}) do items[tonumber(c.it) or 0] = c end
-  -- your card
-  local me = st[ns.selfName] or { b = 0, l = 0 }
-  local card = loot.card
-  card.big:SetText("+" .. (me.b or 0))
-  card.meter:SetValue((me.b or 0) / cap)
-  card.line1:SetText(me.b > 0 and ("Next main-spec roll: /roll 100 " .. color(T.HEX.gold, "+ " .. me.b) .. color(T.HEX.muted, "   ·   " .. me.l .. " lost since your last win"))
-    or ("Next main-spec roll: /roll 100. Lose one and you're at +" .. step .. "."))
-  local won = me.w and (T.itemIcon(me.w.it, 14) .. safe(me.w.n or ("Item " .. me.w.it)) .. " · " .. date("%b %d", me.w.t or 0)) or "none yet this phase"
-  card.line2:SetText("Last main-spec win: " .. won .. (me.c and ("   ·   Contested: " .. safe(items[me.c] and items[me.c].n or "taken")) or ""))
-  -- everyone: the roster's raiders (characters with the addon), with the site's numbers where there are some
-  local rows = {}
-  for _, r in ipairs(everyone(true)) do
-    local s = st[r.name]
-    if s or (r.level or 0) >= 10 then
-      s = s or { b = 0, l = 0 }
-      local text = r.name:lower()
-      if loot.filter == "" or text:find(loot.filter, 1, true) then
-        rows[#rows + 1] = {
-          sortKey = { r.name, s.b or 0, s.l or 0, s.w and s.w.t or 0, s.c and 1 or 0, s.att or 0 },
-          cells = { classed(r.name, r.class or (r.rec and r.rec.class)), bonusText(s.b, (s.b or 0) >= cap) .. (s.live and color(T.HEX.ok, "  •") or ""),
-            color(T.HEX.muted, s.l or 0),
-            s.w and (T.itemIcon(s.w.it, 14) .. safe(s.w.n or "") .. color(T.HEX.muted, "  " .. date("%b %d", s.w.t or 0))) or color(T.HEX.dim, "—"),
-            s.c and color(T.HEX.ok, "Has one") or color(T.HEX.dim, "—"),
-            s.att and color((s.att >= 75) and T.HEX.text or T.HEX.danger, s.att .. "%") or color(T.HEX.dim, "—") },
-          bar = r.name == ns.selfName and T.C.gold or nil,
-          selected = r.name == ns.selfName,
-          onEnter = function(row)
-            GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-            GameTooltip:AddLine(safe(r.name), T.C.gold[1], T.C.gold[2], T.C.gold[3])
-            GameTooltip:AddDoubleLine("Pity bonus", "+" .. (s.b or 0) .. " of " .. cap, 1, 1, 1, 1, 1, 1)
-            GameTooltip:AddDoubleLine("Main-spec rolls lost", tostring(s.l or 0), 1, 1, 1, 1, 1, 1)
-            if s.att then GameTooltip:AddDoubleLine("Attendance, 4 weeks", s.att .. "%", 1, 1, 1, 1, 1, 1) end
-            if s.live then GameTooltip:AddLine("Includes tonight's awards (the site catches up at the next sync).", 0.56, 0.82, 0.54, true) end
-            if s.new then GameTooltip:AddLine("New member: off spec only for their first two raids.", 0.64, 0.68, 0.79, true) end
-            GameTooltip:Show()
-          end,
-        }
-      end
-    end
-  end
-  local key, desc = loot.sort or 2, (loot.sort or 2) ~= 1
-  table.sort(rows, function(a, b)
-    local x, y = a.sortKey[key], b.sortKey[key]
-    if x ~= y then if desc then return x > y end return x < y end
-    return a.sortKey[1] < b.sortKey[1]
-  end)
-  loot.standings:SetRows(rows)
-  loot.hint:SetText("")
-  local live = 0
-  for _, s in pairs(st) do if s.live then live = live + 1 end end
-  ns.setStats({ { #rows, "raiders" }, { "+" .. cap, "max bonus" } })
-  if not plan then card.line2:SetText(color(T.HEX.muted, "No standings from the site yet: they come with the raid calendar.")) end
+  local area = CreateFrame("Frame", nil, page)
+  area:SetPoint("TOPLEFT", 0, -38); area:SetPoint("BOTTOMRIGHT")
+  loot.history = List(area, { { "When", 84 }, { "Item", 220 }, { "Winner", 130 }, { "How", 130 }, { "Rolls", 196 } })
 end
 
 local function renderHistory()
@@ -1307,15 +1211,15 @@ local function renderHistory()
       local a = ns.awardFor(e)
       local rolls = ns.rollsFor(e)
       local how, top = color(T.HEX.dim, "—"), {}
-      if a and a.lane == "list" then
-        how = color(T.HEX.pale, "Contested list")
+      if a and a.lane == "council" then
+        how = color(T.HEX.raids, "Loot council")
       elseif a then
         local w
         for _, r in ipairs(a.rolls or {}) do if r.n == a.n then w = r end end
-        how = (a.spec == "os" and color(T.HEX.muted, "Off spec ") or color(T.HEX.gold, "Main spec ")) .. (w and (w.r .. ((w.b or 0) > 0 and ("+" .. w.b) or "")) or "")
+        how = (a.spec == "os" and color(T.HEX.muted, "Off spec ") or color(T.HEX.gold, "Main spec ")) .. (w and w.r or "")
         for j, r in ipairs(a.rolls or {}) do
           if j > 3 then break end
-          if r.n ~= a.n then top[#top + 1] = firstName(r.n) .. " " .. r.r .. ((r.b or 0) > 0 and color(T.HEX.gold, "+" .. r.b) or "") end
+          if r.n ~= a.n then top[#top + 1] = firstName(r.n) .. " " .. r.r end
         end
       else
         for j = 1, math.min(3, #rolls) do top[#top + 1] = firstName(rolls[j].n) .. " " .. rolls[j].r end
@@ -1329,14 +1233,13 @@ local function renderHistory()
           pcall(GameTooltip.SetHyperlink, GameTooltip, "item:" .. e.it)
           if a and a.lane == "roll" and #(a.rolls or {}) > 0 then
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(a.spec == "os" and "Off-spec roll" or "Main-spec roll, with pity", T.C.gold[1], T.C.gold[2], T.C.gold[3])
+            GameTooltip:AddLine(a.spec == "os" and "Off-spec roll" or "Main-spec roll", T.C.gold[1], T.C.gold[2], T.C.gold[3])
             for _, r in ipairs(a.rolls) do
-              GameTooltip:AddDoubleLine(safe(r.n) .. (r.n == a.n and "  |TInterface\\RaidFrame\\ReadyCheck-Ready:13|t" or ""), r.r .. ((r.b or 0) > 0 and (" + " .. r.b .. " = " .. (r.r + r.b)) or ""), 1, 1, 1, 1, 1, 1)
+              GameTooltip:AddDoubleLine(safe(r.n) .. (r.n == a.n and "  |TInterface\\RaidFrame\\ReadyCheck-Ready:13|t" or ""), tostring(r.r), 1, 1, 1, 1, 1, 1)
             end
-            if #(a.losers or {}) > 0 then GameTooltip:AddLine("+" .. (ns.lootPlan() and ns.lootPlan().step or ns.PITY_STEP) .. " pity for " .. #a.losers .. " main-spec " .. (#a.losers == 1 and "roll" or "rolls") .. " lost.", 0.64, 0.68, 0.79, true) end
-          elseif a and a.lane == "list" then
+          elseif a and a.lane == "council" then
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("From the contested list, by priority.", T.C.gold[1], T.C.gold[2], T.C.gold[3])
+            GameTooltip:AddLine("A high-value item: the officers decided.", T.C.gold[1], T.C.gold[2], T.C.gold[3])
           elseif #rolls > 0 then
             GameTooltip:AddLine(" ")
             GameTooltip:AddLine("Rolls", T.C.gold[1], T.C.gold[2], T.C.gold[3])
@@ -1348,57 +1251,11 @@ local function renderHistory()
       if #rows >= 300 then break end
     end
   end
-  loot.hint:SetText("")
   ns.setStats({ { #log, "drops" } })
   loot.history:SetRows(rows)
 end
 
-local function renderContested()
-  local plan = ns.lootPlan()
-  local st = ns.pityStandings()
-  local rows = {}
-  for _, c in ipairs(plan and plan.contested or {}) do
-    local order, next = {}, nil
-    for i, n in ipairs(c.order or {}) do
-      local has = st[n] and st[n].c and st[n].c ~= tonumber(c.it)
-      local label = i .. ". " .. firstName(n)
-      if c.got == n then label = color(T.HEX.ok, label) .. " |TInterface\\RaidFrame\\ReadyCheck-Ready:13|t"
-      elseif has or c.got then label = color(T.HEX.dim, label)
-      elseif not next then next = n; label = color(T.HEX.pale, label) end
-      order[#order + 1] = label
-    end
-    rows[#rows + 1] = {
-      cells = { T.itemIcon(c.it) .. color(ns.QUALITY[c.q or 4] or "a335ee", safe(c.n or ("Item " .. c.it))), color(T.HEX.muted, safe(c.raid or "")),
-        table.concat(order, "   "), color(T.HEX.muted, safe(c.why or "")) },
-      onEnter = function(row)
-        GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-        pcall(GameTooltip.SetHyperlink, GameTooltip, "item:" .. c.it)
-        GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Priority", T.C.gold[1], T.C.gold[2], T.C.gold[3])
-        for i, n in ipairs(c.order or {}) do
-          GameTooltip:AddDoubleLine(i .. ". " .. safe(n), c.got == n and "has it" or (n == next and "next" or ""), 1, 1, 1, 0.56, 0.82, 0.54)
-        end
-        if c.why then GameTooltip:AddLine(" "); GameTooltip:AddLine(safe(c.why), 1, 1, 1, true) end
-        GameTooltip:Show()
-      end,
-    }
-  end
-  loot.hint:SetText(#rows == 0 and "The officers haven't posted this phase's list yet." or "One contested item each until everyone on the list has one.")
-  ns.setStats({ { #rows, "items" } })
-  loot.contested:SetRows(rows)
-end
-
-local function renderLoot()
-  for _, v in ipairs(VIEWS) do loot.tabs[v]:SetSelected(loot.view == v) end
-  local view = loot.view
-  loot.card:SetShown(view == "Standings")
-  loot.standingsArea:SetShown(view == "Standings")
-  loot.historyArea:SetShown(view == "History")
-  loot.contestedArea:SetShown(view == "Contested")
-  loot.search:SetShown(view ~= "Contested")
-  loot.hint:SetShown(view == "Contested")
-  if view == "Standings" then renderStandings() elseif view == "History" then renderHistory() else renderContested() end
-end
+local function renderLoot() renderHistory() end
 
 -- ---------- Setup tab (first time) ----------
 -- Shown the first time someone opens the addon: what it does, why linking their characters to their Discord

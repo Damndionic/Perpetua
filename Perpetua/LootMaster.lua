@@ -1,8 +1,9 @@
 -- The loot master's window: in a raid, an officer running master loot gets this beside the loot window for each
--- epic. A contested item shows its priority list and who of it is here; anything else is rolled: the window posts
--- the roll to raid warning, collects /rolls for a few seconds, adds everyone's pity bonus and names the winner.
--- Awarding tells the raid, records the award for the guild and the site (Loot.lua), and hands the item over with
--- master loot when the client allows it (otherwise the loot master trades it).
+-- epic. The guild's rules (perpetua.gg/rules): main spec before off spec, rolled; legendaries and other high-value
+-- items go to the loot council (officers decide). Roll: the window posts it to raid warning, collects /rolls for a
+-- few seconds and names the winner. Council: it tells the raid the officers are deciding, and records the award when
+-- the item goes to someone. Awards go to the guild and the site (Loot.lua); a rolled item is handed over with master
+-- loot when the client allows it (otherwise the loot master trades it).
 local _, ns = ...
 local T, safe, try = ns.T, ns.safe, ns.try
 
@@ -18,18 +19,6 @@ local function itemLink()
   local it = LM.item
   local q = ns.QUALITY[it.q or 4] or "a335ee"
   return "|cff" .. q .. "|Hitem:" .. it.id .. "::::::::::::|h[" .. (it.name or ("Item " .. it.id)) .. "]|h|r"
-end
-
--- Raid members, as the addon names them ("First Surname").
-local function raidNames()
-  local out = {}
-  for i = 1, (try(GetNumGroupMembers) or 0) do
-    local first, second = try(UnitName, (try(IsInRaid) and "raid" or "party") .. i)
-    first, second = ns.readable(first), ns.readable(second)
-    if type(first) == "string" then out[ns.fullName(first, ns.FOREVER and type(second) == "string" and second ~= "" and second or nil)] = true end
-  end
-  if ns.selfName then out[ns.selfName] = true end
-  return out
 end
 
 local function say(msg, channel)
@@ -61,7 +50,7 @@ local function build()
   local heads = CreateFrame("Frame", nil, f)
   heads:SetPoint("TOPLEFT", 22, -96); heads:SetPoint("RIGHT", -22, 0); heads:SetHeight(18)
   local line = T.fill(heads, "ARTWORK", T.C.gold, 0.25); line:SetHeight(1); line:SetPoint("BOTTOMLEFT"); line:SetPoint("BOTTOMRIGHT")
-  local COLS = { { 0, 160, "LEFT" }, { 170, 50, "RIGHT" }, { 226, 50, "RIGHT" }, { 282, 56, "RIGHT" }, { 346, 50, "RIGHT" } }
+  local COLS = { { 0, 220, "LEFT" }, { 240, 60, "RIGHT" }, { 320, 70, "RIGHT" } }
   f.heads = {}
   for i, c in ipairs(COLS) do
     local h = T.text(heads, "label", c[3]); h:SetPoint("LEFT", c[1], 0); h:SetWidth(c[2])
@@ -82,7 +71,8 @@ local function build()
   f.status:SetWordWrap(true); f.status:SetJustifyV("BOTTOM")
   f.primary = T.button(f, "Start roll", 180, function() LM.primary() end)
   f.primary:SetPoint("BOTTOMLEFT", 22, 20)
-  f.second = T.button(f, "Reroll", 100, function() LM.startRoll() end, "tab")
+  -- "Council" before a roll (a high-value item: officers decide), "Reroll" after one.
+  f.second = T.button(f, "Council", 100, function() if LM.state == "idle" then LM.council() else LM.startRoll() end end, "tab")
   f.second:SetPoint("LEFT", f.primary, "RIGHT", 10, 0)
   f.cancel = T.button(f, "Skip", 90, function() LM.state = "idle"; f:Hide() end, "tab")
   f.cancel:SetPoint("BOTTOMRIGHT", -22, 20)
@@ -96,7 +86,7 @@ local function build()
   end)
 end
 
--- Fills the window for the current state: "list" (contested), "idle" (not rolled yet), "rolling", "done".
+-- Fills the window for the current state: "idle" (not rolled yet), "rolling", "done", "council".
 function LM.render()
   if not f then return end
   local it = LM.item
@@ -107,42 +97,32 @@ function LM.render()
   local function row(i, cells, win)
     local r = LM.rows[i]
     if not r then return end
-    for j = 1, 5 do r.cells[j]:SetText(cells[j] or "") end
+    for j = 1, 3 do r.cells[j]:SetText(cells[j] or "") end
     r.win:SetShown(win and true or false)
     r:Show()
   end
-  if LM.state == "list" then
-    local c, here = LM.contested, raidNames()
-    local st = ns.pityStandings()
-    f.lane:SetText(color(T.HEX.pale, "Contested list") .. "  ·  " .. safe(c.raid or "") .. "  ·  first one here in priority order")
-    local heads = { "Priority", "Here", "", "", "" }
-    for i, h in ipairs(f.heads) do h:SetText((heads[i] or ""):upper()) end
-    LM.pick = nil
-    for i, n in ipairs(c.order or {}) do
-      local has = c.got == n or (st[n] and st[n].c and st[n].c ~= tonumber(c.it))
-      local ok = here[n] and not has
-      if ok and not LM.pick then LM.pick = n end
-      row(i, { i .. ". " .. safe(n), here[n] and color(T.HEX.ok, "yes") or color(T.HEX.dim, "no"), has and color(T.HEX.dim, "has one") or "" }, LM.pick == n)
-    end
-    f.status:SetText(LM.pick and safe(c.why or "") or "Nobody on the list is in the raid: roll it instead.")
-    f.primary.label:SetText(LM.pick and ("AWARD TO " .. firstName(LM.pick):upper()) or "ROLL IT")
+  if LM.state == "council" then
+    f.lane:SetText(color(T.HEX.raids, "Loot council") .. "  ·  officers decide")
+    for _, h in ipairs(f.heads) do h:SetText("") end
+    f.status:SetText("Officers decide where it goes, by performance and loyalty. Give it with master loot when they have: the award is recorded when it lands.")
+    f.primary.label:SetText("DONE")
     f.primary:SetUsable(true)
     f.second:SetShown(false)
     return
   end
-  f.lane:SetText(color(T.HEX.gold, "Pity roll") .. "  ·  main spec /roll 100, off spec /roll 99")
-  local heads = { "Raider", "Roll", "Pity", "Total", "Spec" }
+  f.lane:SetText(color(T.HEX.gold, "Roll") .. "  ·  main spec /roll 100, off spec /roll 99")
+  local heads = { "Raider", "Roll", "Spec" }
   for i, h in ipairs(f.heads) do h:SetText(heads[i]:upper()) end
   local scored, winner = ns.scoreRolls(LM.rolls)
   LM.scored, LM.winner = scored, winner
   for i, s in ipairs(scored) do
-    row(i, { safe(s.n), tostring(s.r), s.b > 0 and color(T.HEX.gold, "+" .. s.b) or color(T.HEX.dim, "—"),
-      s.spec == "ms" and color(T.HEX.pale, tostring(s.total)) or color(T.HEX.muted, tostring(s.total)),
+    row(i, { safe(s.n), s.spec == "ms" and color(T.HEX.pale, tostring(s.r)) or color(T.HEX.muted, tostring(s.r)),
       s.spec == "ms" and "MS" or color(T.HEX.muted, "OS") }, LM.state == "done" and s == winner)
   end
-  f.second:SetShown(LM.state ~= "idle")
+  f.second:SetShown(true)
+  f.second.label:SetText(LM.state == "idle" and "COUNCIL" or "REROLL")
   if LM.state == "idle" then
-    f.status:SetText("Posts the roll to raid warning and collects rolls for " .. ROLL_TIME .. " seconds. Pity bonuses are added for you.")
+    f.status:SetText("Start roll posts it to raid warning and collects rolls for " .. ROLL_TIME .. " seconds. Legendary or high-value? Council: the officers decide.")
     f.primary.label:SetText("START ROLL")
     f.primary:SetUsable(true)
   elseif LM.state == "rolling" then
@@ -151,10 +131,7 @@ function LM.render()
     f.primary:SetUsable(true)
   else
     if winner then
-      local ms = 0
-      for _, s in ipairs(scored) do if s.spec == "ms" and s ~= winner then ms = ms + 1 end end
-      f.status:SetText(firstName(winner.n) .. " wins " .. (winner.spec == "ms" and "on main spec" or "on off spec") ..
-        (winner.spec == "ms" and ms > 0 and (". " .. ms .. " main-spec " .. (ms == 1 and "roll" or "rolls") .. " lost: +" .. ((ns.lootPlan() and ns.lootPlan().step) or ns.PITY_STEP) .. " each.") or "."))
+      f.status:SetText(firstName(winner.n) .. " wins " .. (winner.spec == "ms" and "on main spec." or "on off spec: nobody rolled main spec."))
       f.primary.label:SetText("AWARD TO " .. firstName(winner.n):upper())
       f.primary:SetUsable(true)
     else
@@ -170,8 +147,7 @@ function LM.open(item)
   if not f then build() end
   LM.item = item
   LM.rolls = {}
-  LM.contested = ns.contestedFor(item.id)
-  LM.state = LM.contested and "list" or "idle"
+  LM.state = "idle"
   f:SetScale(T.scale())
   f:Show()
   LM.render()
@@ -180,31 +156,38 @@ end
 function LM.startRoll()
   if not LM.item then return end
   LM.rolls, LM.state, LM.ends, LM.tick = {}, "rolling", GetTime() + ROLL_TIME, 1
-  LM.contested = nil
-  say("Roll for " .. itemLink() .. ": main spec /roll 100, off spec /roll 99. " .. ROLL_TIME .. " seconds. Your pity bonus is added.", "RAID_WARNING")
+  say("Roll for " .. itemLink() .. ": main spec /roll 100, off spec /roll 99. " .. ROLL_TIME .. " seconds.", "RAID_WARNING")
   LM.render()
 end
 
-function LM.award(name, lane)
+-- A high-value item: the raid hears the officers are deciding; the award is recorded when it's looted (LM.onLooted).
+function LM.council()
+  if not LM.item then return end
+  LM.state = "council"
+  LM.councilFor = { it = LM.item.id, name = LM.item.name, q = LM.item.q, until_ = GetTime() + 15 * 60 }
+  say(itemLink() .. " goes to the loot council: officers decide. Officer calls on loot are final.")
+  LM.render()
+end
+
+-- Every epic looted in the raid (Loot.lua): the council item, when it lands, is recorded as the council's award.
+function LM.onLooted(e)
+  local c = LM.councilFor
+  if not (c and c.it == e.it and GetTime() < c.until_) then return end
+  LM.councilFor = nil
+  ns.recordAward({ it = e.it, name = c.name or e.name, q = c.q or e.q, n = e.n, lane = "council" })
+end
+
+function LM.award(name)
   local it = LM.item
-  local a = { it = it.id, name = it.name, q = it.q, n = name, lane = lane }
-  if lane == "roll" then
-    local w = LM.winner
-    a.spec = w and w.spec or "ms"
-    a.rolls, a.losers = {}, {}
-    for _, s in ipairs(LM.scored or {}) do
-      a.rolls[#a.rolls + 1] = { n = s.n, r = s.r, b = s.b }
-      if s ~= w and s.spec == "ms" and a.spec == "ms" then a.losers[#a.losers + 1] = s.n end
-    end
-    local beat = {}
-    for i, s in ipairs(LM.scored or {}) do
-      if s ~= w and i <= 4 then beat[#beat + 1] = firstName(s.n) .. " " .. s.r .. (s.b > 0 and ("+" .. s.b) or "") end
-    end
-    say(firstName(name) .. " wins " .. itemLink() .. " (" .. (w and (w.r .. (w.b > 0 and ("+" .. w.b) or "")) or "?") .. ", " .. (a.spec == "ms" and "main spec" or "off spec") .. ")"
-      .. (#beat > 0 and (". " .. table.concat(beat, ", ")) or "") .. (#a.losers > 0 and ". Pity +" .. ((ns.lootPlan() and ns.lootPlan().step) or ns.PITY_STEP) .. " for the rest of main spec." or "."))
-  else
-    say(firstName(name) .. " gets " .. itemLink() .. " from the contested list.")
+  local w = LM.winner
+  local a = { it = it.id, name = it.name, q = it.q, n = name, lane = "roll", spec = w and w.spec or "ms", rolls = {} }
+  local beat = {}
+  for i, s in ipairs(LM.scored or {}) do
+    a.rolls[#a.rolls + 1] = { n = s.n, r = s.r }
+    if s ~= w and i <= 4 then beat[#beat + 1] = firstName(s.n) .. " " .. s.r end
   end
+  say(firstName(name) .. " wins " .. itemLink() .. " (" .. (w and w.r or "?") .. ", " .. (a.spec == "ms" and "main spec" or "off spec") .. ")"
+    .. (#beat > 0 and (". " .. table.concat(beat, ", ")) or "") .. ".")
   ns.recordAward(a)
   ns.onLootChat(string.format(LOOT_ITEM or "%s receives loot: %s.", name:gsub(" ", "-"), itemLink())) -- into the loot log now; the real loot line adds nothing new
   -- Hand it over: master loot when the client offers it, else a reminder to trade it.
@@ -226,11 +209,10 @@ function LM.award(name, lane)
 end
 
 function LM.primary()
-  if LM.state == "list" then
-    if LM.pick then LM.award(LM.pick, "list") else LM.state = "idle"; LM.contested = nil; LM.render() end
+  if LM.state == "council" then LM.state = "idle"; f:Hide()
   elseif LM.state == "idle" then LM.startRoll()
   elseif LM.state == "rolling" then LM.state = "done"; LM.render()
-  elseif LM.state == "done" and LM.winner then LM.award(LM.winner.n, "roll") end
+  elseif LM.state == "done" and LM.winner then LM.award(LM.winner.n) end
 end
 
 -- A /roll while the window is collecting (Loot.lua passes every roll it sees in the group).

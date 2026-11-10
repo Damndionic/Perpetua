@@ -121,6 +121,7 @@ function ns.onLootChat(msg)
     or QUALITY_BY_COLOR[(link:match("|cff(%x%x%x%x%x%x)") or ""):lower()]
   if (quality or 0) < MIN_QUALITY then return end
   local e = { n = who, it = id, name = link:match("%[(.-)%]"), q = quality, z = zone(), t = ns.now(), by = ns.selfName }
+  if ns.lootMaster then ns.lootMaster.onLooted(e) end -- a council item the loot master announced has gone to someone
   if addLoot(e) then
     ns.sendLine({ "L", e.t, e.n, e.it, e.q, e.name or "", e.z or "" })
     ns.fire()
@@ -190,23 +191,13 @@ function ns.rollsFor(e)
   return out
 end
 
--- ---------- pity rolls and the contested list ----------
--- Regular drops are rolled: main spec /roll 100, off spec /roll 99. Every main-spec roll you lose adds a bonus to
--- your next one (+10, up to +50); winning a main-spec item puts you back to 0. A few big items per raid are on the
--- contested list instead: officers publish a priority order ahead of time and the first one present gets it.
--- The site keeps the standings: it works them out from the awards and sends them with the raid calendar
--- (calendar.loot, see below). In a raid the addon adds tonight's awards on top, so the numbers stay live.
+-- ---------- rolls and awards ----------
+-- The guild's rules (perpetua.gg/rules): main spec before off spec, rolled (main spec /roll 100, off spec /roll 99).
+-- Legendaries and other high-value items aren't rolled: officers decide (the loot council). The loot master's
+-- window (LootMaster.lua) runs the roll or announces a council item and records the award.
 --
--- calendar.loot = { t, phase, step, cap, standings = { [name] = { b, l, w = { it, n, t }, att, c } },
---   contested = { { it, n, raid, why, order = { names }, got = name } } }
--- Awards (part of guild sync, officers only): { t, it, name, q, n = winner, lane = "roll"|"list", spec = "ms"|"os",
---   losers = { names }, rolls = { { n, r, b } }, by }
-ns.PITY_STEP, ns.PITY_CAP = 10, 50
-
-function ns.lootPlan()
-  local c = ns.calendar and ns.calendar()
-  return c and type(c.loot) == "table" and c.loot or nil
-end
+-- Awards (part of guild sync, officers only): { t, it, name, q, n = winner, lane = "roll"|"council", spec = "ms"|"os",
+--   rolls = { { n, r } }, by }
 
 function ns.awardLog()
   local g = store()
@@ -214,74 +205,24 @@ function ns.awardLog()
   return g.awards
 end
 
-local function step() local p = ns.lootPlan() return p and tonumber(p.step) or ns.PITY_STEP end
-local function cap() local p = ns.lootPlan() return p and tonumber(p.cap) or ns.PITY_CAP end
-
--- Everyone's standing: the site's snapshot plus the awards it hasn't seen yet. name -> { b, l, w, att, c, live }.
-function ns.pityStandings()
-  local plan = ns.lootPlan()
-  local out = {}
-  for name, s in pairs(plan and plan.standings or {}) do
-    if type(s) == "table" then out[name] = { b = tonumber(s.b) or 0, l = tonumber(s.l) or 0, w = s.w, att = s.att, c = s.c, new = s.new } end
-  end
-  local since = plan and tonumber(plan.t) or 0
-  local awards = {}
-  for _, a in ipairs(ns.awardLog()) do if (a.t or 0) > since then awards[#awards + 1] = a end end
-  table.sort(awards, function(x, y) return (x.t or 0) < (y.t or 0) end)
-  for _, a in ipairs(awards) do
-    if a.lane == "roll" and a.spec == "ms" then
-      for _, n in ipairs(a.losers or {}) do
-        local s = out[n] or { b = 0, l = 0 }
-        s.b, s.l, s.live = math.min(cap(), s.b + step()), s.l + 1, true
-        out[n] = s
-      end
-      local w = out[a.n] or { b = 0, l = 0 }
-      w.b, w.l, w.w, w.live = 0, 0, { it = a.it, n = a.name, t = a.t }, true
-      out[a.n] = w
-    elseif a.lane == "list" then
-      local w = out[a.n] or { b = 0, l = 0 }
-      w.c, w.live = a.it, true
-      out[a.n] = w
-    end
-  end
-  return out
-end
-
-function ns.pityBonus(name)
-  local s = ns.pityStandings()[name]
-  return s and s.b or 0
-end
-
--- The contested entry for an item, if it's on this phase's list.
-function ns.contestedFor(itemId)
-  local plan = ns.lootPlan()
-  for _, c in ipairs(plan and plan.contested or {}) do
-    if tonumber(c.it) == tonumber(itemId) then return c end
-  end
-end
-
--- Who wins a roll: main spec (1-100) before off spec (1-99); highest roll plus pity bonus within main spec,
--- highest roll within off spec. Anything else (/roll 50, rolls nobody asked for) doesn't count.
--- rolls: { { n, r, lo, hi } } -> sorted { { n, r, b, total, spec } } and the winner.
+-- Who wins a roll: main spec (1-100) before off spec (1-99), highest roll within each. Anything else (/roll 50,
+-- a second roll) doesn't count. rolls: { { n, r, lo, hi } } -> sorted { { n, r, spec } } and the winner.
 function ns.scoreRolls(rolls)
   local seen, out = {}, {}
   for _, r in ipairs(rolls) do
     if not seen[r.n] and r.lo == 1 and (r.hi == 100 or r.hi == 99) then
       seen[r.n] = true -- a second roll doesn't count
-      local ms = r.hi == 100
-      local b = ms and ns.pityBonus(r.n) or 0
-      out[#out + 1] = { n = r.n, r = r.r, b = b, total = r.r + b, spec = ms and "ms" or "os" }
+      out[#out + 1] = { n = r.n, r = r.r, spec = r.hi == 100 and "ms" or "os" }
     end
   end
   table.sort(out, function(x, y)
     if x.spec ~= y.spec then return x.spec == "ms" end
-    if x.total ~= y.total then return x.total > y.total end
     return x.r > y.r
   end)
   return out, out[1]
 end
 
--- An award: kept, told to the guild ("A" line), and the standings move.
+-- An award: kept and told to the guild ("A" line).
 local function addAward(a)
   local list = ns.awardLog()
   for i = #list, math.max(1, #list - 40), -1 do
@@ -297,8 +238,9 @@ function ns.recordAward(a)
   a.t, a.by = a.t or ns.now(), a.by or ns.selfName
   if not addAward(a) then return end
   local rolls = {}
-  for _, r in ipairs(a.rolls or {}) do rolls[#rolls + 1] = r.n .. "=" .. r.r .. "+" .. (r.b or 0) end
-  ns.sendLine({ "A", a.t, a.n, a.it, a.q or 4, a.name or "", a.lane, a.spec or "", table.concat(a.losers or {}, ","), table.concat(rolls, ",") })
+  for _, r in ipairs(a.rolls or {}) do rolls[#rolls + 1] = r.n .. "=" .. r.r .. "+0" end
+  -- Field 9 (empty) was the pity version's list of losing rolls; kept so the layout stays the same.
+  ns.sendLine({ "A", a.t, a.n, a.it, a.q or 4, a.name or "", a.lane, a.spec or "", "", table.concat(rolls, ",") })
   ns.fire()
 end
 
@@ -307,12 +249,10 @@ function ns.onAwardMessage(f, from)
   local t, id = tonumber(f[2]), tonumber(f[4])
   if not (t and id and f[3]) or math.abs(t - ns.now()) > 6 * 3600 then return end
   if not (ns.isOfficer and ns.isOfficer(from)) then return end
-  local losers = {}
-  for n in (f[9] or ""):gmatch("[^,]+") do losers[#losers + 1] = n end
   local rolls = {}
-  for n, r, b in (f[10] or ""):gmatch("([^,=]+)=(%d+)%+(%d+)") do rolls[#rolls + 1] = { n = n, r = tonumber(r), b = tonumber(b) } end
-  if addAward({ t = t, n = f[3], it = id, q = tonumber(f[5]), name = f[6] ~= "" and f[6] or nil, lane = f[7] == "list" and "list" or "roll",
-    spec = f[8] == "os" and "os" or "ms", losers = losers, rolls = rolls, by = from }) then ns.fire() end
+  for n, r in (f[10] or ""):gmatch("([^,=]+)=(%d+)") do rolls[#rolls + 1] = { n = n, r = tonumber(r) } end
+  if addAward({ t = t, n = f[3], it = id, q = tonumber(f[5]), name = f[6] ~= "" and f[6] or nil, lane = f[7] == "roll" and "roll" or "council",
+    spec = f[8] == "os" and "os" or "ms", rolls = rolls, by = from }) then ns.fire() end
 end
 
 -- The award for a drop in the loot log (same item, same winner, a few minutes apart).
