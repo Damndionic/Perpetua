@@ -1712,10 +1712,10 @@ local TABS = {
   { "Calendar", buildCalendar, renderCalendar, group = "Guild" },
   { "Loot", buildLoot, renderLoot, group = "Guild" },
   { "Character", buildCharacter, renderCharacter, group = "You" },
-  -- Export is for characters the site doesn't have yet: linked ones go up with the officers' sync on their own, so
-  -- it leaves the sidebar for them (still there on /ppta export, and while it's the page you're on).
-  { "Export", buildExport, function() ns.renderExport() end, group = "You", unlinkedOnly = true },
-  { "Setup", buildSetup, renderSetup, group = "You" },
+  { "Export", buildExport, function() ns.renderExport() end, group = "You" },
+  -- Setup is for linking this character to the site: once the site lists it, it leaves the sidebar (still there on
+  -- /ppta setup, and while it's the page you're on).
+  { "Setup", buildSetup, renderSetup, group = "You", unlinkedOnly = true },
   { "Attunements", buildAttunements, renderAttunements, group = "Reference" },
   { "Professions", buildProfessions, renderProfessions, group = "Reference" },
   { "Welcome", buildWelcome, renderWelcome, noNav = true }, -- the only page for characters outside the guild
@@ -1908,7 +1908,7 @@ function ns.showTab(name)
   if not main then build() end
   if not pages[name] then name = "Guild" end -- a page that no longer exists (old slash commands, saved tabs)
   local locked = ns.locked()
-  if locked then name = "Welcome" elseif name == "Welcome" then name = lastTab or (not PerpetuaDB.setupSeen and "Setup") or "Guild" end
+  if locked then name = "Welcome" elseif name == "Welcome" then name = lastTab or (not PerpetuaDB.setupSeen and not ns.linkedOnSite() and "Setup") or "Guild" end
   -- Going anywhere but Setup counts as having seen it: no more "new here?" at login, no landing on Setup.
   if not locked and name ~= "Setup" and name ~= "Welcome" then PerpetuaDB.setupSeen = true end
   if name ~= "Welcome" then lastTab = name end
@@ -2005,7 +2005,7 @@ function ns.refreshUI(now)
   -- Joined or left the guild while the window was open, or the New guild window was switched.
   if ns.locked() ~= (current == "Welcome") then ns.showTab(current) return end
   if main.newGuildShown ~= ns.newGuildWindow() then main.newGuildShown = ns.newGuildWindow(); ns.showTab(current) return end
-  -- The site's list arrived (or changed) with the calendar: Export comes or goes from the sidebar.
+  -- The site's list arrived (or changed) with the calendar: Setup comes or goes from the sidebar.
   if main.linkedShown ~= ns.linkedOnSite() then main.linkedShown = ns.linkedOnSite(); ns.showTab(current) return end
   main.guild:SetText(current ~= "Welcome" and ns.guildName() and ("<" .. safe(ns.guildName()) .. ">") or "")
   main.status:SetText("")
