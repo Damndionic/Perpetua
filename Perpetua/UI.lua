@@ -1494,12 +1494,20 @@ local function buildSetup(page)
   done:SetPoint("BOTTOMRIGHT", -2, 6)
 end
 
-local function renderSetup()
+-- Whether this character is on the site (the site's list of known characters comes with the raid calendar), and
+-- how many of this account's other characters are.
+function ns.linkedOnSite()
   local cal = ns.calendar()
   local known = {}
   for _, n in ipairs(cal and cal.roster or {}) do known[n] = true end
-  local mine, others = ns.selfName and known[ns.selfName], 0
+  local mine, others = ns.selfName and known[ns.selfName] or false, 0
   for alt in pairs(PerpetuaDB.account or {}) do if alt ~= ns.selfName and known[alt] then others = others + 1 end end
+  return mine, others
+end
+
+local function renderSetup()
+  local cal = ns.calendar()
+  local mine, others = ns.linkedOnSite()
   local pending = PerpetuaDB.link
 
   if mine then
@@ -1704,7 +1712,9 @@ local TABS = {
   { "Calendar", buildCalendar, renderCalendar, group = "Guild" },
   { "Loot", buildLoot, renderLoot, group = "Guild" },
   { "Character", buildCharacter, renderCharacter, group = "You" },
-  { "Export", buildExport, function() ns.renderExport() end, group = "You" },
+  -- Export is for characters the site doesn't have yet: linked ones go up with the officers' sync on their own, so
+  -- it leaves the sidebar for them (still there on /ppta export, and while it's the page you're on).
+  { "Export", buildExport, function() ns.renderExport() end, group = "You", unlinkedOnly = true },
   { "Setup", buildSetup, renderSetup, group = "You" },
   { "Attunements", buildAttunements, renderAttunements, group = "Reference" },
   { "Professions", buildProfessions, renderProfessions, group = "Reference" },
@@ -1916,7 +1926,7 @@ function ns.showTab(name)
   for _, t in ipairs(TABS) do
     local b = tabs[t[1]]
     if b then
-      local shown = not locked and (newGuild or not t.newGuild)
+      local shown = not locked and (newGuild or not t.newGuild) and not (t.unlinkedOnly and t[1] ~= name and ns.linkedOnSite())
       b:SetShown(shown)
       b:SetSelected(t[1] == name)
       if shown then
@@ -1995,6 +2005,8 @@ function ns.refreshUI(now)
   -- Joined or left the guild while the window was open, or the New guild window was switched.
   if ns.locked() ~= (current == "Welcome") then ns.showTab(current) return end
   if main.newGuildShown ~= ns.newGuildWindow() then main.newGuildShown = ns.newGuildWindow(); ns.showTab(current) return end
+  -- The site's list arrived (or changed) with the calendar: Export comes or goes from the sidebar.
+  if main.linkedShown ~= ns.linkedOnSite() then main.linkedShown = ns.linkedOnSite(); ns.showTab(current) return end
   main.guild:SetText(current ~= "Welcome" and ns.guildName() and ("<" .. safe(ns.guildName()) .. ">") or "")
   main.status:SetText("")
   local heard = 0
@@ -2011,7 +2023,7 @@ function ns.refreshUI(now)
 end
 ns.fire = function() ns.refreshUI() end
 function ns.currentTabForTest() return current end -- for the test harness
-ns.uiForTest = { char = char, cal = cal }
+ns.uiForTest = { char = char, cal = cal, tabs = tabs }
 
 function ns.toggle(tab)
   if main and main:IsShown() and (not tab or tab == current) then main:Hide() return end

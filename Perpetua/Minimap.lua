@@ -57,7 +57,10 @@ function ns.createMinimapButton()
   border:SetPoint("TOPLEFT")
 
   button:SetScript("OnClick", function(_, mouse)
-    if mouse == "RightButton" then ns.showTab("Export"); ns.renderExport(true)
+    if mouse == "RightButton" then
+      -- Your character page once you're on the site (the export is only for getting there).
+      if ns.linkedOnSite and ns.linkedOnSite() then ns.selected = ns.selfName; ns.showTab("Character")
+      else ns.showTab("Export"); ns.renderExport(true) end
     else ns.toggle() end
   end)
   button:SetScript("OnDragStart", function(self) self:SetScript("OnUpdate", onDragUpdate) end)
@@ -71,7 +74,7 @@ function ns.createMinimapButton()
     local update = ns.updateAvailable()
     if update then GameTooltip:AddLine("Update available: " .. update, 0.95, 0.84, 0.55) end
     GameTooltip:AddLine("Left-click: guild, characters, attunements, professions", 0.64, 0.67, 0.79)
-    GameTooltip:AddLine("Right-click: your export for " .. ns.SITE, 0.64, 0.67, 0.79)
+    GameTooltip:AddLine(ns.linkedOnSite and ns.linkedOnSite() and "Right-click: your character" or ("Right-click: your export for " .. ns.SITE), 0.64, 0.67, 0.79)
     GameTooltip:AddLine("Drag to move · /perpetua minimap to hide", 0.64, 0.67, 0.79)
     GameTooltip:Show()
   end)
