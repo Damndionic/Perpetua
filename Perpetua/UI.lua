@@ -1,4 +1,4 @@
--- The Perpetua window (/perpetua): Guild, Character, Attunements, Crafters and Export tabs, all read from
+-- The Perpetua window (/perpetua): Guild, Character, Attunements, Professions and Export tabs, all read from
 -- what guild sync has collected (ns.players()). Styled after the site by Theme.lua; the only Blizzard
 -- templates used are the scroll frame and the checkbox.
 local _, ns = ...
@@ -561,94 +561,271 @@ local function renderAttunements()
   att.list:SetRows(rows)
 end
 
--- ---------- Crafters tab ----------
+-- ---------- Professions tab ----------
+-- One profession at a time: the professions down the left with who has each (skill, online) under them, that
+-- profession's recipes on the right. Click a crafter to see only what they can make; click them again for all.
 
 local crafters = { filter = "" }
 
-local function buildCrafters(page)
-  local search = T.searchBox(page, 300, "Search recipes…", function(t) crafters.filter = t:lower(); ns.refreshUI() end)
+-- Icons for the profession list; anything else gets the question mark.
+local PROF_ICON = {
+  Alchemy = "Trade_Alchemy", Blacksmithing = "Trade_BlackSmithing", Enchanting = "Trade_Engraving",
+  Engineering = "Trade_Engineering", Leatherworking = "INV_Misc_ArmorKit_17", Tailoring = "Trade_Tailoring",
+  Jewelcrafting = "INV_Misc_Gem_01", Inscription = "INV_Inscription_Tradeskill01", Cooking = "INV_Misc_Food_15",
+  ["First Aid"] = "Spell_Holy_SealOfSacrifice", Fishing = "Trade_Fishing", Mining = "Trade_Mining",
+  Herbalism = "Trade_Herbalism", Skinning = "INV_Misc_Pelt_Wolf_01",
+}
+local ONLINE_DOT = "|TInterface\\FriendsFrame\\StatusIcon-Online:12:12:0:0|t "
+local function profIcon(prof) return "|TInterface\\Icons\\" .. (PROF_ICON[prof] or "INV_Misc_QuestionMark") .. ":16:16:0:0:64:64:5:59:5:59|t  " end
+
+local function whisper(name)
+  -- Straight to a whisper: typing "/w First Surname" would stop at the space.
+  local tell = (ChatFrameUtil and ChatFrameUtil.SendTell) or ChatFrame_SendTell
+  if tell and name then pcall(tell, name) end
+end
+
+local function buildProfessions(page)
+  local left = CreateFrame("Frame", nil, page)
+  left:SetPoint("TOPLEFT"); left:SetPoint("BOTTOMLEFT"); left:SetWidth(232)
+  crafters.profArea = CreateFrame("Frame", nil, left)
+  crafters.profArea:SetPoint("TOPLEFT"); crafters.profArea:SetPoint("RIGHT"); crafters.profArea:SetHeight(24 + 7 * 26)
+  crafters.profList = List(crafters.profArea, { { "Profession", 150 }, { "#", 36, "RIGHT" } })
+  local who = CreateFrame("Frame", nil, left)
+  who:SetPoint("TOPLEFT", crafters.profArea, "BOTTOMLEFT", 0, -14); who:SetPoint("BOTTOMRIGHT")
+  crafters.whoList = List(who, { { "Crafters", 150 }, { "Skill", 36, "RIGHT" } })
+
+  local right = CreateFrame("Frame", nil, page)
+  right:SetPoint("TOPLEFT", left, "TOPRIGHT", 16, 0); right:SetPoint("BOTTOMRIGHT")
+  local search = T.searchBox(right, 240, "Search recipes…", function(t)
+    crafters.filter = t:lower(); crafters.jump = true; ns.refreshUI()
+  end)
   search:SetPoint("TOPLEFT", 2, 0)
-  crafters.hint = T.text(page, "muted")
-  crafters.hint:SetPoint("LEFT", search, "RIGHT", 14, 0)
-  local area = CreateFrame("Frame", nil, page)
-  area:SetPoint("TOPLEFT", 0, -38)
-  area:SetPoint("BOTTOMRIGHT")
-  crafters.list = List(area, { { "Recipe", 300 }, { "Profession", 120 }, { "Who can make it", 280 } })
+  crafters.hint = T.text(right, "muted")
+  crafters.hint:SetPoint("LEFT", search, "RIGHT", 14, 0); crafters.hint:SetPoint("RIGHT", right, "RIGHT", -26, 0)
+  crafters.hint:SetWordWrap(false); crafters.hint:SetJustifyH("LEFT")
+  local area = CreateFrame("Frame", nil, right)
+  area:SetPoint("TOPLEFT", 0, -38); area:SetPoint("BOTTOMRIGHT")
+  crafters.list = List(area, { { "Recipe", 254 }, { "Who can make it", 218 } })
 end
 
 -- One player's recipes as a flat list { n, prof, it, id }, unpacked once per recipes version (rec.rv): when
--- someone's recipes change, only theirs are unpacked again.
+-- someone's recipes change, only theirs are unpacked again. Also their skill per profession from the same data.
 local function playerRecipes(name, rec)
   crafters.byPlayer = crafters.byPlayer or {}
   local key = rec.rv or rec.recipes or rec.rz
   local cached = crafters.byPlayer[name]
-  if cached and cached.key == key then return cached.list end
-  local list = {}
+  if cached and cached.key == key then return cached.list, cached.skill end
+  local list, skill = {}, {}
   local recipes = ns.recipesOf(rec)
   for prof, saved in pairs(type(recipes) == "table" and recipes or {}) do
-    for _, r in ipairs(type(saved) == "table" and saved.list or {}) do
-      if r.n then list[#list + 1] = { n = r.n, prof = prof, it = r.it, id = r.id } end
+    if type(saved) == "table" then
+      skill[prof] = { r = tonumber(saved.r), m = tonumber(saved.m) }
+      for _, r in ipairs(type(saved.list) == "table" and saved.list or {}) do
+        if r.n then list[#list + 1] = { n = r.n, prof = prof, it = r.it, id = r.id } end
+      end
     end
   end
-  crafters.byPlayer[name] = { key = key, list = list }
-  return list
+  crafters.byPlayer[name] = { key = key, list = list, skill = skill }
+  return list, skill
 end
 
--- recipe name -> { prof, item, spell, people }, built when the page is shown and rebuilt only when someone's
--- recipes change; let go when the window closes (OnHide).
-local function craftersIndex()
-  if crafters.index and crafters.indexAt == (ns.recipesChanged or 0) then return crafters.index, crafters.count end
-  local index, count = {}, 0
+-- prof -> { recipes = { name -> { item, spell, people } }, count, people = { name -> { r, m, n } } }, built when
+-- the page is shown and rebuilt only when someone's recipes change; let go when the window closes (OnHide).
+-- Crafters who never opened their profession window still appear, from their profile, with no recipes.
+local function professionsIndex()
+  local stamp = (ns.recipesChanged or 0) .. ":" .. (ns.profilesChanged or 0)
+  if crafters.index and crafters.indexAt == stamp then return crafters.index, crafters.total end
+  local index, total = {}, 0
+  local function prof(n)
+    local e = index[n]
+    if not e then e = { recipes = {}, count = 0, people = {} }; index[n] = e end
+    return e
+  end
   for name, rec in pairs(ns.players()) do
     if type(rec) == "table" then
-      for _, r in ipairs(playerRecipes(name, rec)) do
-        local e = index[r.n]
-        if not e then e = { prof = r.prof, item = r.it, spell = r.id, people = {} }; index[r.n] = e; count = count + 1 end
-        e.people[#e.people + 1] = name
+      local list, skill = playerRecipes(name, rec)
+      for _, r in ipairs(list) do
+        local e = prof(r.prof)
+        local x = e.recipes[r.n]
+        if not x then x = { item = r.it, spell = r.id, people = {} }; e.recipes[r.n] = x; e.count = e.count + 1; total = total + 1 end
+        x.people[#x.people + 1] = name
+        local who = e.people[name] or { n = 0 }
+        who.n = who.n + 1
+        e.people[name] = who
+      end
+      for p, sk in pairs(skill) do
+        local who = prof(p).people[name] or { n = 0 }
+        who.r, who.m = sk.r, sk.m
+        prof(p).people[name] = who
+      end
+      for _, x in ipairs(rec.profile and rec.profile.profs or {}) do
+        if x.n and not ns.NO_RECIPES[x.n] then
+          local who = prof(x.n).people[name] or { n = 0 }
+          who.r, who.m = who.r or x.r, who.m or x.m
+          prof(x.n).people[name] = who
+        end
       end
     end
   end
-  crafters.index, crafters.count, crafters.indexAt = index, count, ns.recipesChanged or 0
-  return index, count
+  for _, e in pairs(index) do
+    for _, x in pairs(e.recipes) do table.sort(x.people) end
+  end
+  crafters.index, crafters.total, crafters.indexAt = index, total, stamp
+  return index, total
 end
 
-local function renderCrafters()
-  local index, count = craftersIndex()
+-- Guildmates online right now, from the guild roster.
+local function onlineNow()
+  local set = {}
+  for i = 1, (GetNumGuildMembers and try(GetNumGuildMembers) or 0) do
+    local full, _, _, _, _, _, _, _, online = try(GetGuildRosterInfo, i)
+    local key = online and ns.playerKey(full)
+    if key then set[key] = true end
+  end
+  return set
+end
+
+local function matches(recipe) return crafters.filter == "" or recipe:lower():find(crafters.filter, 1, true) ~= nil end
+
+local function renderProfessions()
+  local index, total = professionsIndex()
+  local online = onlineNow()
+  local names, hits = {}, {}
+  for p, e in pairs(index) do
+    names[#names + 1] = p
+    local n = 0
+    if crafters.filter ~= "" then for r in pairs(e.recipes) do if matches(r) then n = n + 1 end end end
+    hits[p] = n
+  end
+  -- Professions with recipes first (biggest first), then the ones nobody has shared recipes for.
+  table.sort(names, function(a, b)
+    local ca, cb = index[a].count, index[b].count
+    if (ca > 0) ~= (cb > 0) then return ca > 0 end
+    return a < b
+  end)
+
+  -- Which profession: the one picked, else your own first one with recipes, else the first.
+  if not index[crafters.prof or ""] then
+    crafters.prof, crafters.who = nil, nil
+    local me = ns.me and ns.me()
+    for _, x in ipairs(me and me.profile and me.profile.profs or {}) do
+      if index[x.n] and index[x.n].count > 0 then crafters.prof = x.n break end
+    end
+    crafters.prof = crafters.prof or names[1]
+  end
+  -- A new search that finds nothing here moves to the profession with the most matches.
+  if crafters.jump and crafters.filter ~= "" and (hits[crafters.prof] or 0) == 0 then
+    local best
+    for _, p in ipairs(names) do if hits[p] > 0 and (not best or hits[p] > hits[best]) then best = p end end
+    if best then crafters.prof, crafters.who = best, nil end
+  end
+  crafters.jump = nil
+
+  local profRows = {}
+  for _, p in ipairs(names) do
+    local e = index[p]
+    local n = crafters.filter ~= "" and hits[p] or e.count
+    profRows[#profRows + 1] = {
+      selected = p == crafters.prof,
+      cells = { profIcon(p) .. (p == crafters.prof and color(T.HEX.pale, safe(p)) or safe(p)),
+        n > 0 and color(T.HEX.gold, n) or color(T.HEX.dim, crafters.filter ~= "" and "0" or "–") },
+      onClick = function() crafters.prof, crafters.who = p, nil; ns.refreshUI() end,
+    }
+  end
+  crafters.profArea:SetHeight(24 + math.max(3, math.min(#profRows, 9)) * ROW_H)
+  crafters.profList:SetRows(profRows)
+
+  local e = crafters.prof and index[crafters.prof]
+  if not e then
+    crafters.whoList:SetRows({}); crafters.list:SetRows({})
+    crafters.hint:SetText("No professions yet: they arrive as guildmates' profiles do.")
+    ns.setStats(nil)
+    return
+  end
+
+  -- Crafters: highest skill first, then name.
+  local people, onlineCount = {}, 0
+  for name, who in pairs(e.people) do people[#people + 1] = { name = name, who = who } end
+  table.sort(people, function(a, b)
+    local ra, rb = a.who.r or 0, b.who.r or 0
+    if ra ~= rb then return ra > rb end
+    return a.name < b.name
+  end)
+  if crafters.who and not e.people[crafters.who] then crafters.who = nil end
+  local whoRows = {}
+  for _, x in ipairs(people) do
+    local name, who = x.name, x.who
+    local rec = ns.players()[name]
+    if online[name] then onlineCount = onlineCount + 1 end
+    local label = classed(name, rec and rec.class)
+    if who.n == 0 then label = color(T.HEX.dim, safe(name)) end
+    whoRows[#whoRows + 1] = {
+      selected = name == crafters.who,
+      cells = { (online[name] and ONLINE_DOT or "") .. label,
+        who.r and color(who.m and who.r >= who.m and T.HEX.ok or T.HEX.text, who.r) or color(T.HEX.dim, "?") },
+      onClick = function(_, button)
+        if button == "RightButton" then whisper(name) return end
+        crafters.who = crafters.who ~= name and name or nil
+        ns.refreshUI()
+      end,
+      onEnter = function(row)
+        GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(name, T.C.gold[1], T.C.gold[2], T.C.gold[3])
+        GameTooltip:AddLine(crafters.prof .. (who.r and ("  " .. who.r .. (who.m and ("/" .. who.m) or "")) or ""), 1, 1, 1)
+        GameTooltip:AddLine(who.n > 0 and (who.n .. " recipes shared") or "No recipes shared yet: they open their profession window once.", 0.64, 0.67, 0.79, true)
+        GameTooltip:AddLine(online[name] and "Online" or "Offline", online[name] and 0.56 or 0.5, online[name] and 0.82 or 0.53, online[name] and 0.54 or 0.6)
+        GameTooltip:AddLine((name == crafters.who and "Click to show everyone's recipes." or "Click to show only their recipes.") .. "  Right-click to whisper.", T.C.gold[1], T.C.gold[2], T.C.gold[3], true)
+        GameTooltip:Show()
+      end,
+    }
+  end
+  crafters.whoList:SetRows(whoRows)
+
+  -- Recipes in this profession (only the picked crafter's, if one is picked).
   local rows, shown = {}, 0
-  for recipe, e in pairs(index) do
-    if crafters.filter == "" or recipe:lower():find(crafters.filter, 1, true) then
+  for recipe, x in pairs(e.recipes) do
+    local mine = not crafters.who
+    if crafters.who then for _, n in ipairs(x.people) do if n == crafters.who then mine = true break end end end
+    if mine and matches(recipe) then
       shown = shown + 1
-      if shown <= 300 then
-        table.sort(e.people)
-        local names = {}
-        for _, n in ipairs(e.people) do
-          local rec = ns.players()[n]
-          names[#names + 1] = classed(n, rec and rec.class)
-        end
-        rows[#rows + 1] = {
-          sortKey = recipe:lower(),
-          cells = { T.itemIcon(e.item) .. safe(recipe), color(T.HEX.muted, safe(e.prof)), table.concat(names, ", ") },
-          onEnter = function(row)
-            local link = e.item and ("item:" .. e.item) or e.spell and ("spell:" .. e.spell)
-            if not link then return end
-            GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-            pcall(GameTooltip.SetHyperlink, GameTooltip, link)
-            GameTooltip:AddLine("Click to whisper " .. e.people[1], T.C.gold[1], T.C.gold[2], T.C.gold[3])
-            GameTooltip:Show()
-          end,
-          onClick = function()
-            -- Straight to a whisper: typing "/w First Surname" would stop at the space.
-            local tell = (ChatFrameUtil and ChatFrameUtil.SendTell) or ChatFrame_SendTell
-            if tell then pcall(tell, e.people[1]) end
-          end,
-        }
+      local who, first = {}, nil
+      for _, n in ipairs(x.people) do
+        local rec = ns.players()[n]
+        who[#who + 1] = (online[n] and ONLINE_DOT or "") .. classed(n, rec and rec.class)
+        if online[n] and not first then first = n end
       end
+      -- Whisper the picked crafter, else someone online, else the first who knows it.
+      local target = crafters.who or first or x.people[1]
+      rows[#rows + 1] = {
+        sortKey = recipe:lower(),
+        cells = { T.itemIcon(x.item) .. safe(recipe), table.concat(who, ", ") },
+        onEnter = function(row)
+          GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+          local link = x.item and ("item:" .. x.item) or x.spell and ("spell:" .. x.spell)
+          if link then pcall(GameTooltip.SetHyperlink, GameTooltip, link) else GameTooltip:AddLine(recipe, 1, 1, 1) end
+          if #x.people > 1 then GameTooltip:AddLine(#x.people .. " guildmates can make it", 0.64, 0.67, 0.79) end
+          GameTooltip:AddLine("Click to whisper " .. target, T.C.gold[1], T.C.gold[2], T.C.gold[3])
+          GameTooltip:Show()
+        end,
+        onClick = function() whisper(target) end,
+      }
     end
   end
   table.sort(rows, function(a, b) return a.sortKey < b.sortKey end)
-  crafters.hint:SetText(count == 0 and "No recipes yet: guildmates share them after opening their profession windows."
-    or string.format("%d recipes known across the guild%s", count, shown > 300 and "  ·  showing the first 300 matches" or ""))
   crafters.list:SetRows(rows)
+
+  local hint
+  if e.count == 0 then
+    hint = "Nobody has shared " .. safe(crafters.prof) .. " recipes yet: they open their profession window once."
+  elseif crafters.who then
+    hint = string.format("%d of %s's recipes%s", shown, safe(crafters.who), crafters.filter ~= "" and " match" or "")
+  elseif crafters.filter ~= "" then
+    hint = string.format("%d of %d match", shown, e.count)
+  else
+    hint = "Click a recipe to whisper a crafter."
+  end
+  crafters.hint:SetText(hint)
+  ns.setStats({ { #people, "crafters" }, { onlineCount, "online", "ok" }, { total, "recipes in the guild" } })
 end
 
 -- ---------- Calendar tab ----------
@@ -1222,109 +1399,6 @@ local function renderLoot()
   if view == "Standings" then renderStandings() elseif view == "History" then renderHistory() else renderContested() end
 end
 
--- ---------- Forums tab ----------
-
-local forum = { board = nil, selected = nil }
-
-local function buildForums(page)
-  forum.page = page
-  forum.tabs = {}  -- board buttons, made when the boards are known (they come with the snapshot)
-  forum.left = CreateFrame("Frame", nil, page)
-  forum.left:SetWidth(360)
-  forum.list = List(forum.left, { { "Thread", 240 }, { "Last", 56, "RIGHT" } })
-
-  forum.right = CreateFrame("Frame", nil, page)
-  T.panel(forum.right)
-  local inner = CreateFrame("Frame", nil, forum.right)
-  inner:SetPoint("TOPLEFT", 8, -10); inner:SetPoint("BOTTOMRIGHT", -4, 6)
-  forum.canvas = Canvas(inner, { width = 380, x = { 8, 8 }, w = 350 })
-end
-
--- One tab per board ("All" first), wrapping onto a second row when they don't fit. Returns the height used.
-local function layoutBoardTabs(boards)
-  local list = { { id = false, n = "All" } }
-  for _, b in ipairs(boards) do list[#list + 1] = b end
-  local maxW = math.max(600, (forum.page:GetWidth() or 0) > 0 and forum.page:GetWidth() or 828)
-  local x, y = 0, 0
-  for i, b in ipairs(list) do
-    local tab = forum.tabs[i]
-    if not tab then
-      tab = T.button(forum.page, "", 80, function(self) forum.board = self.boardId or nil; forum.selected = nil; ns.refreshUI(true) end, "tab")
-      forum.tabs[i] = tab
-    end
-    tab.boardId = b.id
-    tab.label:SetText(safe(b.n):upper())
-    local w = math.ceil((tab.label:GetStringWidth() or 60) + 24)
-    tab:SetWidth(w)
-    if x > 0 and x + w > maxW then x, y = 0, y + 32 end
-    tab:ClearAllPoints()
-    tab:SetPoint("TOPLEFT", x, -y)
-    tab:SetSelected((forum.board or false) == b.id)
-    tab:Show()
-    x = x + w + 6
-  end
-  for i = #list + 1, #forum.tabs do forum.tabs[i]:Hide() end
-  return y + 26
-end
-
-local function renderForums()
-  local f = ns.forums()
-  local boards = {}
-  for _, b in ipairs(f and f.boards or {}) do boards[b.id] = b end
-  local top = layoutBoardTabs(f and f.boards or {}) + 10
-  forum.left:ClearAllPoints(); forum.left:SetPoint("TOPLEFT", 0, -top); forum.left:SetPoint("BOTTOMLEFT")
-  forum.right:ClearAllPoints(); forum.right:SetPoint("TOPLEFT", 374, -top); forum.right:SetPoint("BOTTOMRIGHT")
-  local threads = {}
-  for _, t in ipairs(f and f.threads or {}) do
-    if not forum.board or t.b == forum.board then threads[#threads + 1] = t end
-  end
-  table.sort(threads, function(a, b)
-    if (a.pin or 0) ~= (b.pin or 0) then return (a.pin or 0) > (b.pin or 0) end
-    return (a.last or 0) > (b.last or 0)
-  end)
-  local rows, current = {}, nil
-  for _, t in ipairs(threads) do
-    if t.id == forum.selected then current = t end
-    local mark = ns.threadUnread(t) and color(T.HEX.gold, "● ") or "   "
-    local title = (t.pin == 1 and color(T.HEX.warm, "Pinned  ") or "") .. (t.lock == 1 and color(T.HEX.muted, "Locked  ") or "") .. safe(t.title)
-    rows[#rows + 1] = {
-      cells = { mark .. (t.id == forum.selected and color(T.HEX.pale, title) or title), color(T.HEX.muted, ns.ago(t.last)) },
-      onClick = function() forum.selected = t.id; ns.refreshUI(true) end,
-    }
-  end
-  forum.list:SetRows(rows)
-
-  local C = forum.canvas
-  C:Reset()
-  if not f then
-    C:Para(color(T.HEX.muted, "The forums arrive from an officer's addon: when an officer with the Perpetua app logs in or presses Save & reload, they're shared with everyone online."), "body")
-    return
-  end
-  if not current then
-    C:Heading(forum.board and boards[forum.board] and boards[forum.board].n or "Forums")
-    C:Para("Pick a thread on the left. " .. #threads .. " recently active " .. (#threads == 1 and "thread" or "threads") .. " from " .. ns.SITE .. "/forums, as of " .. ns.ago(f.t) .. ".", "body")
-    C:Para(color(T.HEX.muted, "Officer-only boards stay on the site."), "small")
-    return
-  end
-  ns.markThreadRead(current)
-  C:Para(color(T.HEX.gold, safe(current.title)), "heading")
-  C:Line(color(T.HEX.muted, (boards[current.b] and safe(boards[current.b].n) or "") .. "  ·  started by " .. safe(current.by) .. "  ·  " .. (current.n or 0) .. " posts"), "muted")
-  C:Gap(6)
-  local first = (current.n or 0) - #(current.posts or {})
-  if first > 0 then C:Line(color(T.HEX.muted, "Showing the latest " .. #current.posts .. " of " .. current.n .. " posts."), "muted") end
-  for _, p in ipairs(current.posts or {}) do
-    C:Gap(8)
-    local rank = p.r == "gm" and color(T.HEX.gold, "  Guild Master") or p.r == "officer" and color(T.HEX.gold, "  Officer") or ""
-    C:Line(color(T.HEX.pale, safe(p.by)) .. rank .. color(T.HEX.muted, "  ·  " .. ns.ago(p.t)), "small")
-    C:Para(safe(p.body), "small", 6)
-    if p.cut then C:Line(color(T.HEX.muted, "(continues on the site)"), "muted", nil, 6) end
-  end
-  C:Gap(12)
-  local threadUrl = "https://" .. ns.SITE .. "/forums/t/" .. current.id
-  C:Action("> Reply on the site" .. (current.lock == 1 and "  (locked)" or ""), function() T.copyBox("Reply on the site", threadUrl) end)
-  C:Line(color(T.HEX.muted, "Forums as of " .. ns.ago(f.t)), "muted")
-end
-
 -- ---------- Setup tab (first time) ----------
 -- Shown the first time someone opens the addon: what it does, why linking their characters to their Discord
 -- account on the site matters, and a box to enter the link code. The status card reads the site's list of
@@ -1619,104 +1693,6 @@ function ns.renderExport(focus)
   if focus then export.edit:SetFocus(); export.edit:HighlightText() end
 end
 
--- ---------- Hide Olympus page ----------
--- Opened from "Hide Olympus" above Save & reload in the sidebar (Olympus.lua does the hiding). The sidebar switch turns
--- everything on or off; here each part can be switched off on its own.
-
-local oly = {}
-
-local function buildOlympus(page)
-  local O = ns.olympus
-  local left = CreateFrame("Frame", nil, page)
-  left:SetPoint("TOPLEFT"); left:SetPoint("BOTTOMLEFT"); left:SetWidth(452)
-  T.panel(left)
-  local h = T.text(left, "heading"); h:SetPoint("TOPLEFT", 18, -18); h:SetText("HIDE OLYMPUS")
-  oly.switch = T.switch(left, O.set)
-  oly.switch:SetPoint("TOPRIGHT", -18, -16)
-  oly.state = T.text(left, "muted", "RIGHT"); oly.state:SetPoint("RIGHT", oly.switch, "LEFT", -10, 0)
-  local intro = left:CreateFontString(nil, "OVERLAY")
-  intro:SetFontObject(T.fonts.small); intro:SetJustifyH("LEFT"); intro:SetJustifyV("TOP"); intro:SetWordWrap(true)
-  intro:SetPoint("TOPLEFT", 18, -46); intro:SetPoint("RIGHT", -18, 0); intro:SetHeight(58)
-  intro:SetText("For players in any guild with " .. color(T.HEX.pale, "Olympus") .. " in its name. It all happens on your screen: "
-    .. "nobody goes on your ignore list and they can't tell.")
-  oly.checks = {}
-  local function check(key, label, hint, y, indent)
-    local c = CreateFrame("CheckButton", nil, left, "UICheckButtonTemplate")
-    c:SetSize(24, 24); c:SetPoint("TOPLEFT", 14 + (indent or 0), y)
-    local l = T.text(left, "body"); l:SetPoint("TOPLEFT", c, "TOPRIGHT", 4, -3); l:SetText(label)
-    local d = T.text(left, "muted"); d:SetPoint("TOPLEFT", l, "BOTTOMLEFT", 0, -2); d:SetPoint("RIGHT", -18, 0); d:SetText(hint or "")
-    oly.checks[#oly.checks + 1] = { key = key, check = c, label = l, hint = d }
-    return c
-  end
-  local y = -108
-  for _, o in ipairs(O.OPTIONS) do
-    local c = check(o.key, o.label, o.hint, y, o.parent and 26)
-    oly.checks[#oly.checks].parent = o.parent
-    c:SetScript("OnClick", function(self) O.setOption(o.key, self:GetChecked()) end)
-    y = y - (o.hint ~= "" and (o.parent and 46 or 52) or 36)
-  end
-  local n = check("notify", "Tell me in chat when something's turned away", "Invites, trades and duels. Hidden chat is only counted.", y - 6)
-  n:SetScript("OnClick", function(self) O.db().notify = self:GetChecked() and true or false end)
-
-  local right = CreateFrame("Frame", nil, page)
-  right:SetPoint("TOPLEFT", 468, 0); right:SetPoint("BOTTOMRIGHT")
-  local status = CreateFrame("Frame", nil, right)
-  status:SetPoint("TOPLEFT"); status:SetPoint("TOPRIGHT", -2, 0); status:SetHeight(290)
-  T.panel(status)
-  local sh = T.text(status, "label"); sh:SetPoint("TOPLEFT", 18, -16); sh:SetText("OLYMPUS PLAYERS KNOWN")
-  oly.known = T.text(status, "name"); oly.known:SetPoint("TOPLEFT", sh, "BOTTOMLEFT", 0, -8)
-  oly.learned = T.text(status, "muted"); oly.learned:SetPoint("TOPLEFT", oly.known, "BOTTOMLEFT", 0, -4)
-  -- Running totals, three across: messages hidden, invites turned down, trades cancelled.
-  oly.totals = {}
-  for i, key in ipairs({ "messages", "invites", "trades" }) do
-    local n = T.text(status, "brand"); n:SetPoint("TOPLEFT", oly.learned, "BOTTOMLEFT", (i - 1) * 88, -14)
-    n:SetTextColor(T.C.pale[1], T.C.pale[2], T.C.pale[3])
-    local l = T.text(status, "label"); l:SetPoint("TOPLEFT", n, "BOTTOMLEFT", 0, -3); l:SetText(key:upper()); l:SetAlpha(0.8)
-    oly.totals[key] = n
-  end
-  local th = T.text(status, "label"); th:SetPoint("TOPLEFT", oly.learned, "BOTTOMLEFT", 0, -64); th:SetText("TURNED AWAY THIS SESSION")
-  oly.counts = status:CreateFontString(nil, "OVERLAY")
-  oly.counts:SetFontObject(T.fonts.small); oly.counts:SetJustifyH("LEFT"); oly.counts:SetJustifyV("TOP"); oly.counts:SetWordWrap(true)
-  oly.counts:SetPoint("TOPLEFT", th, "BOTTOMLEFT", 0, -6); oly.counts:SetPoint("BOTTOMRIGHT", -16, 12)
-
-  local lookup = T.button(right, "Look them up", 170, function()
-    local i = O.lookUp()
-    oly.lookupNote:SetText("Searched " .. i .. " of " .. O.WHO_TOTAL .. ". Click for the next.")
-  end, "tab")
-  lookup:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, -14)
-  oly.lookupNote = T.text(right, "muted"); oly.lookupNote:SetPoint("TOPLEFT", lookup, "BOTTOMLEFT", 2, -6); oly.lookupNote:SetPoint("RIGHT", -4, 0)
-  oly.lookupNote:SetText("A /who for Olympus players, 50 a click.")
-  local how = right:CreateFontString(nil, "OVERLAY")
-  how:SetFontObject(T.fonts.muted); how:SetJustifyH("LEFT"); how:SetJustifyV("TOP"); how:SetWordWrap(true)
-  how:SetPoint("TOPLEFT", oly.lookupNote, "BOTTOMLEFT", 0, -14); how:SetPoint("BOTTOMRIGHT", -6, 4)
-  how:SetText(color(T.HEX.gold, "HOW IT KNOWS") .. "\nThe game only shows someone's guild when you see them: nameplates, "
-    .. "mouseover, target, your group, a trade or an invite. Everyone spotted is remembered; chat from someone not seen "
-    .. "yet still shows until they are. Your own /who searches teach it too.")
-end
-
-local function renderOlympus()
-  local O = ns.olympus
-  local db = O.db()
-  oly.switch:SetOn(db.on)
-  oly.state:SetText(db.on and color(T.HEX.ok, "On") or "Off")
-  for _, c in ipairs(oly.checks) do
-    if c.key == "notify" then c.check:SetChecked(db.notify and true or false) else c.check:SetChecked(db.opts[c.key] ~= false) end
-    local on = db.on and not (c.parent and db.opts[c.parent] == false)
-    c.check:SetEnabled(on and true or false)
-    local a = on and 1 or T.DISABLED_ALPHA
-    c.label:SetAlpha(a); c.hint:SetAlpha(a)
-  end
-  oly.known:SetText(O.knownCount())
-  oly.learned:SetText(O.session.learned .. " new this session")
-  for key, n in pairs(oly.totals) do n:SetText(db.totals[key] or 0) end
-  local lines = {}
-  for _, o in ipairs(O.OPTIONS) do
-    local n = O.session.counts[o.key] or 0
-    if n > 0 then lines[#lines + 1] = color(T.HEX.pale, n) .. "  " .. O.COUNTED[o.key] end
-  end
-  oly.counts:SetText(#lines > 0 and table.concat(lines, "\n") or color(T.HEX.muted, db.on and "Nothing yet." or "Switched off."))
-end
-
 -- ---------- window ----------
 
 -- The sidebar, in groups: the guild, you, and reference pages.
@@ -1726,18 +1702,13 @@ local TABS = {
   { "Guild Info", function(page) ns.buildGuildInfo(page) end, function() ns.renderGuildInfo() end, group = "Guild", newGuild = true }, -- with the New guild window
   { "Calendar", buildCalendar, renderCalendar, group = "Guild" },
   { "Loot", buildLoot, renderLoot, group = "Guild" },
-  { "Forums", buildForums, renderForums, group = "Guild" },
   { "Character", buildCharacter, renderCharacter, group = "You" },
   { "Export", buildExport, function() ns.renderExport() end, group = "You" },
   { "Setup", buildSetup, renderSetup, group = "You" },
   { "Attunements", buildAttunements, renderAttunements, group = "Reference" },
-  { "Crafters", buildCrafters, renderCrafters, group = "Reference" },
+  { "Professions", buildProfessions, renderProfessions, group = "Reference" },
   { "Welcome", buildWelcome, renderWelcome, noNav = true }, -- the only page for characters outside the guild
-  { "Hide Olympus", buildOlympus, renderOlympus, noNav = true }, -- opened from its row above Save & reload
 }
-if not ns.FORUMS then
-  for i, t in ipairs(TABS) do if t[1] == "Forums" then table.remove(TABS, i) break end end
-end
 
 local NAV = {
   Guild = { "INV_BannerPVP_02", "Ranks, notes, specs, gear and professions" }, -- short: the numbers sit beside it
@@ -1746,13 +1717,11 @@ local NAV = {
   Character = { "INV_Chest_Plate16", "Gear, talents, professions and more" },
   Calendar = { "INV_Misc_PocketWatch_01", "Upcoming raids and who's coming" },
   Attunements = { "INV_Misc_Key_14", "Who can get in where" },
-  Crafters = { "Trade_BlackSmithing", "Who can make what" },
+  Professions = { "Trade_BlackSmithing", "Who can make what" },
   Loot = { "INV_Misc_Bag_10", "Raid drops and the rolls for them" },
-  Forums = { "INV_Scroll_03", "The latest from the guild forums" },
   Export = { "INV_Scroll_05", "Your profile for the site" },
   Setup = { "INV_Misc_Book_09", "Link your characters to perpetua.gg" },
   Welcome = { "INV_BannerPVP_02", "The guild companion for Perpetua members" },
-  ["Hide Olympus"] = { "INV_Shield_06", "Hide chat, invites, trades and duels from Olympus guilds" },
 }
 
 -- Big numbers in the page header (the site's "42 characters on the roster"). A page's renderer calls
@@ -1873,41 +1842,22 @@ local function build()
   end
 
   local card = CreateFrame("Frame", nil, side)
-  card:SetPoint("BOTTOMLEFT", 14, 14); card:SetPoint("BOTTOMRIGHT", -14, 14); card:SetHeight(132)
+  card:SetPoint("BOTTOMLEFT", 14, 14); card:SetPoint("BOTTOMRIGHT", -14, 14); card:SetHeight(102)
   local cbg = T.fill(card, "BACKGROUND", T.C.midnight, 0.7); cbg:SetAllPoints()
   T.outline(card, 0, T.C.gold, 0.25)
   main.syncCard = card
   main.syncDot = T.fill(card, "ARTWORK", { 0.561, 0.820, 0.541 }, 1); main.syncDot:SetSize(6, 6); main.syncDot:SetPoint("TOPLEFT", 12, -15)
   main.sync = T.text(card, "small"); main.sync:SetPoint("LEFT", main.syncDot, "RIGHT", 7, 0); main.sync:SetPoint("RIGHT", -10, 0)
   main.update = T.text(card, "tagline"); main.update:SetPoint("TOPLEFT", 12, -28); main.update:SetPoint("RIGHT", -10, 0)
-  -- Hide Olympus: the switch turns it all on or off, the label opens its page.
-  local oly = CreateFrame("Frame", nil, card)
-  oly:SetPoint("TOPLEFT", 12, -50); oly:SetPoint("RIGHT", -12, 0); oly:SetHeight(20)
-  local olyLabel = CreateFrame("Button", nil, oly)
-  olyLabel:SetPoint("TOPLEFT"); olyLabel:SetPoint("BOTTOMRIGHT", -44, 0)
-  olyLabel.text = T.text(olyLabel, "badge"); olyLabel.text:SetPoint("LEFT", 0, 0); olyLabel.text:SetText("HIDE OLYMPUS")
-  olyLabel.text:SetTextColor(T.C.text[1], T.C.text[2], T.C.text[3])
-  olyLabel:SetScript("OnClick", function() ns.showTab("Hide Olympus") end)
-  olyLabel:SetScript("OnEnter", function(self)
-    self.text:SetTextColor(T.C.pale[1], T.C.pale[2], T.C.pale[3])
-    GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Hide Olympus", T.C.gold[1], T.C.gold[2], T.C.gold[3])
-    GameTooltip:AddLine("Hides chat from players in Olympus guilds and turns away their whispers, invites, trades and duels. Click to choose which.", 1, 1, 1, true)
-    GameTooltip:Show()
-  end)
-  olyLabel:SetScript("OnLeave", function(self) self.text:SetTextColor(T.C.text[1], T.C.text[2], T.C.text[3]); GameTooltip:Hide() end)
-  main.olySwitch = T.switch(oly, ns.olympus.set)
-  main.olySwitch:SetPoint("RIGHT", 0, 0)
-  main.olyRow = oly
   local sync = T.button(card, "Save & reload", 140, function() ns.saveAndReload() end, "tab")
-  sync:SetPoint("TOPLEFT", 12, -80); sync:SetPoint("RIGHT", -12, 0)
+  sync:SetPoint("TOPLEFT", 12, -50); sync:SetPoint("RIGHT", -12, 0)
   main.syncButton = sync
   local version = T.text(card, "muted", "CENTER"); version:SetPoint("TOP", sync, "BOTTOM", 0, -6)
   version:SetText("v" .. ns.VERSION); version:SetAlpha(0.6)
   sync:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:AddLine("Save & reload", T.C.gold[1], T.C.gold[2], T.C.gold[3])
-    GameTooltip:AddLine("Reloads your UI so WoW saves the guild's data for the Perpetua app, and loads the newest calendar" .. (ns.FORUMS and " and forums" or "") .. ".", 1, 1, 1, true)
+    GameTooltip:AddLine("Reloads your UI so WoW saves the guild's data for the Perpetua app, and loads the newest calendar" .. ".", 1, 1, 1, true)
     GameTooltip:Show()
   end)
   sync:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1940,7 +1890,7 @@ for _, t in ipairs(TABS) do renderers[t[1]] = t[3] end
 local lastTab -- where a member was before the window locked (they left the guild)
 function ns.showTab(name)
   if not main then build() end
-  if not pages[name] then name = "Guild" end -- a switched-off page (ns.FORUMS)
+  if not pages[name] then name = "Guild" end -- a page that no longer exists (old slash commands, saved tabs)
   local locked = ns.locked()
   if locked then name = "Welcome" elseif name == "Welcome" then name = lastTab or (not PerpetuaDB.setupSeen and "Setup") or "Guild" end
   -- Going anywhere but Setup counts as having seen it: no more "new here?" at login, no landing on Setup.
@@ -2043,7 +1993,6 @@ function ns.refreshUI(now)
   main.status:SetText("")
   local heard = 0
   for _ in pairs(ns.session.heard) do heard = heard + 1 end
-  main.olySwitch:SetOn(ns.olympus.db().on)
   main.newSwitch:SetOn(ns.newGuildWindow())
   local update = not ns.locked() and ns.updateAvailable()
   main.update:SetText(update and ("Update available: " .. safe(update)) or "")

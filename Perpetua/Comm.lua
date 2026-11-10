@@ -6,10 +6,10 @@
 --   L / R                                                   a loot drop / a /roll seen in a raid (Loot.lua)
 --
 -- Parts: P = profile (gear, talents, stats, attunements, reps, raid sign-ups), R = recipes, C = the raid
--- calendar (Calendar.lua), F = the forums snapshot (Forums.lua). Only officers send C and F, versioned by when
--- the site made them. A version is a hash of the data,
--- so an unchanged character sends nothing. When several people are behind on the same thing they share one
--- broadcast: a request is skipped if someone else already asked or the data is already on its way.
+-- calendar (Calendar.lua). Only officers send C, versioned by when the site made it. (F was the in-game forums
+-- snapshot, removed with the site's forums; the hello keeps its sixth field as "-" so older versions still parse
+-- it.) A version is a hash of the data, so an unchanged character sends nothing. When several people are behind
+-- on the same thing they share one broadcast: a request is skipped if someone else already asked or the data is already on its way.
 --
 -- Everyone only ever sends their own character, and a received profile is kept only if the name inside it
 -- matches the sender the server reports, so nobody can post data under someone else's name.
@@ -117,7 +117,7 @@ function ns.refreshSelf(quiet)
   if json ~= last.json or last.name ~= name then
     last.json, last.name = json, name
     local pv = ns.hash(json)
-    if me.pv ~= pv then me.pv, me.pt, changed = pv, ns.now(), true end
+    if me.pv ~= pv then me.pv, me.pt, changed = pv, ns.now(), true; ns.profilesChanged = (ns.profilesChanged or 0) + 1 end
   end
   me.profile = profile -- the latest read, stats included, for the site and the next send
   -- Recipes only change when a profession window was read (ns.onRecipesChanged).
@@ -217,7 +217,7 @@ function ns.announce()
   if not me then ns.scheduleRefresh(2) return end
   lastAnnounce = GetTime()
   enqueue(table.concat({ "H", me.pv or "-", me.rv or "-", ns.announcedVersion(), ns.calendarVersion and ns.calendarVersion() or "-",
-    ns.forumsVersion and ns.forumsVersion() or "-" }, "\t"))
+    "-" }, "\t"))
 end
 
 -- A one-message update (loot, rolls) for the whole guild.
@@ -231,10 +231,9 @@ local packed = {} -- part -> { v = version, s = packed string }: re-sends reuse 
 local function sendPart(part)
   local me = ns.me()
   if not me then return end
-  local version = part == "P" and me.pv or part == "R" and me.rv or part == "C" and ns.calendarVersion()
-    or part == "F" and ns.forumsVersion() or nil
+  local version = part == "P" and me.pv or part == "R" and me.rv or part == "C" and ns.calendarVersion() or nil
   if not version or sendPending[part] then return end
-  if (part == "C" or part == "F") and not ns.isOfficer(ns.selfName) then return end -- nobody would accept it
+  if part == "C" and not ns.isOfficer(ns.selfName) then return end -- nobody would accept it
   local last = lastSent[part]
   if last and last.v == version and GetTime() - last.at < 30 then return end -- just sent it; they'll have it
   sendPending[part] = true
@@ -244,8 +243,7 @@ local function sendPart(part)
     me = ns.me()
     if not me then return end
     -- Read the version now: the data may have changed during the wait.
-    version = part == "P" and me.pv or part == "R" and me.rv or part == "C" and ns.calendarVersion()
-      or part == "F" and ns.forumsVersion() or nil
+    version = part == "P" and me.pv or part == "R" and me.rv or part == "C" and ns.calendarVersion() or nil
     if not version then return end
     local cachedPack = packed[part]
     if cachedPack and cachedPack.v == version then
@@ -262,9 +260,6 @@ local function sendPart(part)
       payload.t = me.pt
     elseif part == "C" then
       payload = ns.calendar()
-      if not payload then return end
-    elseif part == "F" then
-      payload = ns.forums()
       if not payload then return end
     else
       payload = { t = me.rt, r = me.recipes }
@@ -291,7 +286,7 @@ local function request(name, part, version)
   -- Random wait so one guildmate asks and the rest just listen for the broadcast.
   C_Timer.After(1 + math.random() * 3, function()
     local rec = ns.players()[name]
-    local have = part == "C" and ns.calendarVersion() or part == "F" and ns.forumsVersion() or rec and (part == "P" and rec.pv or rec.rv)
+    local have = part == "C" and ns.calendarVersion() or rec and (part == "P" and rec.pv or rec.rv)
     if have == version or buffers[name .. part .. version] then return end
     if asked[key] and GetTime() - asked[key] < 60 then return end
     asked[key] = GetTime()
@@ -315,12 +310,10 @@ local function accept(from, part, version, s)
     players[from] = rec
     -- Kept compact: the summary the lists read, and the packed string for when their page is opened.
     rec.profile, rec.pz, rec.pv, rec.pt = ns.summarize(data), s, version, tonumber(data.t)
+    ns.profilesChanged = (ns.profilesChanged or 0) + 1 -- the Professions page lists crafters from profiles too
     rec.class, rec.level = c.classFile, tonumber(c.level)
   elseif part == "C" then
     if ns.isOfficer(from) then ns.adoptCalendar(data) end
-    return
-  elseif part == "F" then
-    if ns.isOfficer(from) then ns.adoptForums(data) end
     return
   elseif part == "R" then
     if type(data.r) ~= "table" then return end
@@ -390,8 +383,6 @@ local function onMessage(text, channel, sender)
     -- A newer raid calendar, from an officer.
     local calT = tonumber(f[5])
     if calT and calT > (tonumber(ns.calendarVersion()) or 0) and ns.isOfficer(from) then request(from, "C", f[5]) end
-    local forumT = tonumber(f[6])
-    if ns.FORUMS and forumT and forumT > (tonumber(ns.forumsVersion()) or 0) and ns.isOfficer(from) then request(from, "F", f[6]) end
     -- A hello only changes the window when it's someone new or their addon version changed.
     if newHere or wasAddon ~= rec.addon then ns.fire() end
   elseif kind == "L" or kind == "R" then
@@ -407,7 +398,7 @@ local function onMessage(text, channel, sender)
     -- Someone else asked for it and we already have this version: don't collect and unpack it all again.
     local rec = ns.players()[from]
     local have = part == "P" and rec and rec.pv or part == "R" and rec and rec.rv
-      or part == "C" and ns.calendarVersion() or part == "F" and ns.forumsVersion() or nil
+      or part == "C" and ns.calendarVersion() or nil
     if have == version then return end
     local key = from .. part .. version
     local b = buffers[key]

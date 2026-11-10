@@ -327,7 +327,7 @@ end
 
 -- ---------- guildmates' data, kept small ----------
 -- A guildmate's full profile (gear, talents, stats, reputations) and recipes are only needed when someone opens
--- their Character page or the Crafters page, so they're kept as the compressed strings guild sync delivered
+-- their Character page or the Professions page, so they're kept as the compressed strings guild sync delivered
 -- (rec.pz, rec.rz: "PERP1Z:..." from ns.pack) and rec.profile holds just this summary, which the lists read.
 -- Your own characters keep full tables: they're what you send.
 local SUMMARY_CHAR = { "name", "surname", "class", "classFile", "level", "race", "raceFile", "faction", "guild", "guildRank" }
@@ -383,7 +383,7 @@ function ns.fullProfile(rec)
   return lastFull.data
 end
 
--- A player's recipes ({ [profession] = { list, t, r, m } }), unpacked if need be. Not kept: the Crafters page
+-- A player's recipes ({ [profession] = { list, t, r, m } }), unpacked if need be. Not kept: the Professions page
 -- builds its index from these and holds that instead.
 function ns.recipesOf(rec)
   if type(rec) ~= "table" then return nil end
