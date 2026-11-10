@@ -290,7 +290,8 @@ local function Canvas(parent, layout)
   -- Section heading: Cinzel caps over a faint gold hairline.
   function C:Heading(text)
     if self.y[self.col] > 0 then self:Gap(12) end
-    self:Line(text:upper(), "heading")
+    -- Upper case outside |T...|t and |c...|r escapes (a state glyph in a heading).
+    self:Line(text:find("|", 1, true) and text or text:upper(), "heading")
     self.usedRules = self.usedRules + 1
     local r = self.rules[self.usedRules]
     if not r then r = T.gradient(child, "ARTWORK", "HORIZONTAL", T.C.gold, 0.45, T.C.gold, 0); r:SetHeight(1); self.rules[self.usedRules] = r end
@@ -732,7 +733,7 @@ local function renderProfessions()
       onClick = function() crafters.prof, crafters.who = p, nil; ns.refreshUI() end,
     }
   end
-  crafters.profArea:SetHeight(24 + math.max(3, math.min(#profRows, 9)) * ROW_H)
+  crafters.profArea:SetHeight(24 + math.max(3, math.min(#profRows, 11)) * ROW_H)
   crafters.profList:SetRows(profRows)
 
   local e = crafters.prof and index[crafters.prof]
@@ -832,7 +833,7 @@ end
 
 local cal = { selected = nil }
 local STATUS_TEXT = { coming = "Coming", tentative = "Tentative", absent = "Can't make it" }
-local STATUS_COLOR = { coming = T.HEX.ok, tentative = T.HEX.warm, absent = "7a8298" }
+local STATUS_STATE = { coming = "ok", tentative = "wait", absent = "out" } -- glyph + word (T.state)
 
 local function whenText(t) return date("%a %b %d, %H:%M", t) end
 
@@ -1131,7 +1132,7 @@ local function renderCalendar()
   cal.role = role
   for s, b in pairs(cal.status) do b:SetSelected(s == status) end
   for r, b in pairs(cal.roles) do b:SetSelected(r == role) end
-  cal.mine:SetText(status and ("You: " .. color(STATUS_COLOR[status], STATUS_TEXT[status]) .. (mine and (mine.t or 0) > (ns.calendar().t or 0) and "  (goes to the site with the next guild sync)" or ""))
+  cal.mine:SetText(status and ("You: " .. T.state(STATUS_STATE[status], STATUS_TEXT[status]) .. (mine and (mine.t or 0) > (ns.calendar().t or 0) and "  (goes to the site with the next guild sync)" or ""))
     or "You haven't signed up. Pick one below.")
 
   C:Action("> Open this raid on the site", function() T.copyBox("Raid on the site", "https://" .. ns.SITE .. "/raids/" .. e.id) end)
@@ -1141,7 +1142,7 @@ local function renderCalendar()
   local groups = { Tank = {}, Healer = {}, DPS = {} }
   local tentative, absent = {}, {}
   for _, s in ipairs(list) do
-    local who = T.classIcon(s.c) .. classed(s.n, s.c) .. (s.l == "confirmed" and color(T.HEX.ok, "  in") or s.l == "bench" and color(T.HEX.muted, "  bench") or "")
+    local who = T.classIcon(s.c) .. classed(s.n, s.c) .. (s.l == "confirmed" and ("  " .. T.state("ok", "In")) or s.l == "bench" and ("  " .. T.state("wait", "Bench")) or "")
     if s.s == "coming" then table.insert(groups[s.r] or groups.DPS, who)
     elseif s.s == "tentative" then tentative[#tentative + 1] = who
     else absent[#absent + 1] = who end
@@ -1151,8 +1152,8 @@ local function renderCalendar()
     if #groups[r] == 0 then C:Line(color(T.HEX.muted, "None yet"), "small") end
     for _, w in ipairs(groups[r]) do C:Line(w, "small", nil, 6) end
   end
-  if #tentative > 0 then C:Heading("Tentative  " .. #tentative); for _, w in ipairs(tentative) do C:Line(w, "small", nil, 6) end end
-  if #absent > 0 then C:Heading("Can't make it  " .. #absent); for _, w in ipairs(absent) do C:Line(w, "small", nil, 6) end end
+  if #tentative > 0 then C:Heading(T.glyph("wait") .. " TENTATIVE  " .. #tentative); for _, w in ipairs(tentative) do C:Line(w, "small", nil, 6) end end
+  if #absent > 0 then C:Heading(T.glyph("out") .. " CAN'T MAKE IT  " .. #absent); for _, w in ipairs(absent) do C:Line(w, "small", nil, 6) end end
 end
 
 -- ---------- Loot tab ----------
@@ -1726,7 +1727,14 @@ local NAV = {
 
 -- Big numbers in the page header (the site's "42 characters on the roster"). A page's renderer calls
 -- ns.setStats({ { 42, "members" }, { 12, "online", "ok" } }); pages that don't, show none.
-local SUBTITLE_X, STATS_RIGHT = 196 + 26 + 150 + 12, 1020 - 26 -- where the subtitle starts / the numbers end
+local BANNER_X, STATS_RIGHT = 196 + 22, 1020 - 26 -- where the banner starts / the numbers end
+-- Section tints (the site's docs/design.md §2): raids and loot are crimson, the rest gold.
+local SECTION = { Calendar = T.C.raids, Loot = T.C.raids }
+local function fitBanner(statsWidth)
+  local name = main.bannerFor
+  if not name then return end
+  main.banner:Set(name:upper(), NAV[name][2], SECTION[name], STATS_RIGHT - (statsWidth > 0 and (statsWidth + 24) or 0) - BANNER_X)
+end
 local function setStats(list)
   local used = 0 -- width the numbers take, so the subtitle beside the rule stops short of them
   for i = #main.stats, 1, -1 do main.stats[i].n:Hide(); main.stats[i].l:Hide() end
@@ -1750,8 +1758,8 @@ local function setStats(list)
     used = used + (prev and 24 or 0) + (st.n:GetStringWidth() or 0) + 7 + (st.l:GetStringWidth() or 0)
     prev = st.n
   end
-  -- A long subtitle ends in "…" before the numbers instead of running under them.
-  main.subtitle:SetWidth(math.max(40, STATS_RIGHT - (used > 0 and (used + 20) or 0) - SUBTITLE_X))
+  -- The banner stops short of the numbers (a long line ends in "…").
+  fitBanner(used)
   main.statsSet = true
 end
 function ns.setStats(list) if main then setStats(list) end end
@@ -1867,11 +1875,9 @@ local function build()
   main.lockedNote:SetWordWrap(true); main.lockedNote:SetJustifyH("LEFT")
   main.lockedNote:SetText("Guild sync, the calendar, loot and everything else unlock when you join <" .. ns.GUILD .. ">.")
 
-  -- Page header: the title over the site's gold rule with a diamond, a subtitle beside it, numbers on the right.
+  -- Page header: the site's section banner (title and one line, tinted by section), numbers on the right.
   local X = SIDE + 26
-  main.title = T.text(main, "title"); main.title:SetPoint("TOPLEFT", X, -(TOP + 18))
-  main.rule = T.rule(main); main.rule:SetPoint("TOPLEFT", main.title, "BOTTOMLEFT", 0, -6); main.rule:SetWidth(150)
-  main.subtitle = T.text(main, "muted"); main.subtitle:SetPoint("LEFT", main.rule, "RIGHT", 12, 0) -- width: setStats
+  main.banner = T.banner(main); main.banner:SetPoint("TOPLEFT", X - 4, -(TOP + 4))
   main.status = T.text(main, "muted", "RIGHT"); main.status:SetPoint("BOTTOMRIGHT", main, "TOPRIGHT", -26, -112) -- errors only
 
   for _, t in ipairs(TABS) do
@@ -1928,10 +1934,10 @@ function ns.showTab(name)
   end
   main.syncCard:SetShown(not locked); main.lockedNote:SetShown(locked)
   main.newRow:SetShown(not locked)
-  main.title:SetText(name:upper())
+  main.bannerFor = name
   local tabsCalendar = tabs.Calendar
   if tabsCalendar then tabsCalendar:SetCount(ns.upcomingRaids and ns.upcomingRaids() or 0) end
-  main.subtitle:SetText(NAV[name][2])
+  fitBanner(0)
   main:Show()
   ns.refreshUI(true)
 end

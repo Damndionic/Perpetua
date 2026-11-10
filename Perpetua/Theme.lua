@@ -16,9 +16,11 @@ local C = {
   navy = { 0.055, 0.102, 0.251 }, midnight = { 0.047, 0.090, 0.188 }, royal = { 0.082, 0.165, 0.369 },
   royalLight = { 0.110, 0.184, 0.431 }, ink = { 0.027, 0.051, 0.118 }, dim = { 0.498, 0.533, 0.659 },
   text = { 0.937, 0.902, 0.784 }, muted = { 0.639, 0.675, 0.788 },
+  ok = { 0.561, 0.820, 0.541 },
+  raids = { 0.753, 0.314, 0.247 }, -- the site's section tint for raids and loot (docs/design.md §2)
 }
 T.C = C
-T.HEX = { gold = "d4af37", pale = "f2d78c", warm = "e8c874", text = "efe6c8", muted = "a3acc9", ok = "8fd18a", danger = "ff8a7a", dim = "7f88a8" }
+T.HEX = { gold = "d4af37", pale = "f2d78c", warm = "e8c874", text = "efe6c8", muted = "a3acc9", ok = "8fd18a", danger = "ff8a7a", dim = "7f88a8", raids = "c0503f" }
 
 local function font(name, file, size, color, fallback)
   local f = CreateFont(name)
@@ -193,30 +195,68 @@ function T.icon(parent, path, size)
   return holder
 end
 
--- 32: ten entries in three groups fit above the sync card (6 + 3 x 28 + 10 x 32 = 410 of 431px).
+
+-- The site's pennant cut (The Standard, docs/design.md §3) for horizontal shapes: a flat fill whose right edge has
+-- a notch `depth` px deep, like the section banners. Drawn as a body plus two triangles (Media/notch). Returns an
+-- object: :SetFill(cTop, aTop, cBot, aBot) fades top to bottom (cBot omitted = flat), :SetShown(on).
+-- The textures belong to `frame`; `area` (default frame) is the rectangle they fill, so a shape inset in a button
+-- stays on the button's own layers, under its text.
+local NOTCH = MEDIA .. "notch"
+function T.notched(frame, layer, depth, area)
+  area = area or frame
+  local body = frame:CreateTexture(nil, layer); body:SetTexture(WHITE)
+  body:SetPoint("TOPLEFT", area); body:SetPoint("BOTTOMRIGHT", area, -depth, 0)
+  local top = frame:CreateTexture(nil, layer); top:SetTexture(NOTCH)
+  top:SetPoint("TOPLEFT", body, "TOPRIGHT"); top:SetPoint("BOTTOMLEFT", body, "RIGHT"); top:SetWidth(depth)
+  local bot = frame:CreateTexture(nil, layer); bot:SetTexture(NOTCH); bot:SetTexCoord(0, 1, 1, 0)
+  bot:SetPoint("TOPLEFT", body, "RIGHT"); bot:SetPoint("BOTTOMLEFT", body, "BOTTOMRIGHT"); bot:SetWidth(depth)
+  local parts = { body, top, bot }
+  local function grad(t, c1, a1, c2, a2) -- c1 at the top
+    t:SetVertexColor(1, 1, 1, 1)
+    if not pcall(t.SetGradient, t, "VERTICAL", CreateColor(c2[1], c2[2], c2[3], a2), CreateColor(c1[1], c1[2], c1[3], a1)) then
+      t:SetVertexColor(c1[1], c1[2], c1[3], (a1 + a2) / 2)
+    end
+  end
+  return {
+    parts = parts,
+    SetFill = function(_, c1, a1, c2, a2)
+      if not c2 then
+        for _, t in ipairs(parts) do pcall(t.SetGradient, t, "VERTICAL", CreateColor(1, 1, 1, 1), CreateColor(1, 1, 1, 1)); t:SetVertexColor(c1[1], c1[2], c1[3], a1 or 1) end
+        return
+      end
+      local mid = { (c1[1] + c2[1]) / 2, (c1[2] + c2[2]) / 2, (c1[3] + c2[3]) / 2 }
+      grad(body, c1, a1, c2, a2)
+      grad(top, c1, a1, mid, (a1 + a2) / 2)
+      grad(bot, mid, (a1 + a2) / 2, c2, a2)
+    end,
+    SetShown = function(_, on) for _, t in ipairs(parts) do t:SetShown(on) end end,
+  }
+end
+
+-- 32: ten entries in three groups fit above the sync card.
 T.NAV_H = 32
 
--- Sidebar entry: icon and label; hover glows, the selected one gets a gold bar and a gold wash fading to the right.
--- b:SetCount(n) shows a small gold count (upcoming raids).
+-- Sidebar entry, drawn as one of the site's pennants: a royal pennant with a notched end, solid gold with navy
+-- text when it's the page you're on, a gold wash on hover. b:SetCount(n) shows a small count (upcoming raids).
 function T.navButton(parent, label, iconPath, onClick)
   local b = CreateFrame("Button", nil, parent)
   b:SetHeight(T.NAV_H)
-  b.wash = T.gradient(b, "BACKGROUND", "HORIZONTAL", C.gold, 0.22, C.gold, 0)
-  b.wash:SetAllPoints()
-  b.bar = T.fill(b, "ARTWORK", C.gold, 1)
-  b.bar:SetPoint("TOPLEFT", 0, -6); b.bar:SetPoint("BOTTOMLEFT", 0, 6); b.bar:SetWidth(3)
-  local hl = T.gradient(b, "HIGHLIGHT", "HORIZONTAL", C.gold, 0.12, C.gold, 0)
-  hl:SetAllPoints()
+  local area = b:CreateTexture(nil, "BACKGROUND") -- an invisible rectangle the pennant fills
+  area:SetPoint("TOPLEFT", 10, -2); area:SetPoint("BOTTOMRIGHT", -12, 2)
+  b.cloth = T.notched(b, "BACKGROUND", 11, area)
+  local hl = T.notched(b, "BORDER", 11, area); hl:SetFill(C.gold, 0.14); hl:SetShown(false)
+  b:SetScript("OnEnter", function() if not b.selected then hl:SetShown(true) end end)
+  b:SetScript("OnLeave", function() hl:SetShown(false) end)
   b.icon = T.icon(b, iconPath, 18)
-  b.icon:SetPoint("LEFT", 18, 0)
+  b.icon:SetPoint("LEFT", 20, 0)
   b.label = T.text(b, "nav")
-  b.label:SetPoint("LEFT", b.icon, "RIGHT", 11, 0)
+  b.label:SetPoint("LEFT", b.icon, "RIGHT", 10, 0)
   b.label:SetText(label:upper())
   b.count = CreateFrame("Frame", nil, b)
-  b.count:SetSize(18, 15); b.count:SetPoint("RIGHT", -14, 0)
-  local cbg = T.fill(b.count, "BACKGROUND", C.gold, 1); cbg:SetAllPoints()
+  b.count:SetSize(18, 15); b.count:SetPoint("RIGHT", -28, 0)
+  b.count.bg = T.fill(b.count, "BACKGROUND", C.gold, 1); b.count.bg:SetAllPoints()
   b.count.text = T.text(b.count, "badge", "CENTER"); b.count.text:SetPoint("CENTER", 0, 0)
-  b.count.text:SetTextColor(C.navy[1], C.navy[2], C.navy[3]); b.count.text:SetShadowColor(0, 0, 0, 0)
+  b.count.text:SetShadowColor(0, 0, 0, 0)
   b.count:Hide()
   function b:SetCount(n)
     self.count:SetShown((n or 0) > 0)
@@ -224,10 +264,19 @@ function T.navButton(parent, label, iconPath, onClick)
     self.count:SetWidth(math.max(18, (self.count.text:GetStringWidth() or 0) + 10))
   end
   function b:SetSelected(on)
-    self.wash:SetShown(on)
-    self.bar:SetShown(on)
-    local c = on and C.pale or C.text
-    self.label:SetTextColor(c[1], c[2], c[3], on and 1 or 0.8)
+    self.selected = on
+    if on then
+      hl:SetShown(false)
+      self.cloth:SetFill(C.pale, 1, C.gold, 1)
+      self.label:SetTextColor(C.navy[1], C.navy[2], C.navy[3], 1); self.label:SetShadowColor(0, 0, 0, 0)
+      self.count.bg:SetVertexColor(C.navy[1], C.navy[2], C.navy[3], 1)
+      self.count.text:SetTextColor(C.pale[1], C.pale[2], C.pale[3])
+    else
+      self.cloth:SetFill(C.royal, 0.45)
+      self.label:SetTextColor(C.text[1], C.text[2], C.text[3], 0.8); self.label:SetShadowColor(0, 0, 0, 0.85)
+      self.count.bg:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 1)
+      self.count.text:SetTextColor(C.navy[1], C.navy[2], C.navy[3])
+    end
     self.icon.tex:SetDesaturated(not on)
     self.icon.tex:SetAlpha(on and 1 or 0.75)
     self.icon.edge:SetAlpha(on and 0.9 or 0.3)
@@ -235,6 +284,45 @@ function T.navButton(parent, label, iconPath, onClick)
   b:SetSelected(false)
   b:SetScript("OnClick", onClick)
   return b
+end
+
+-- The section banner at the top of each page (the site's .sec-banner): a pennant flying right with the page title
+-- and one italic line, its top edge in the section's tint. banner:Set(title, line, tint, maxWidth).
+function T.banner(parent)
+  local f = CreateFrame("Frame", nil, parent)
+  f:SetHeight(52)
+  f.cloth = T.notched(f, "BACKGROUND", 22)
+  f.edge = T.fill(f, "BORDER", C.gold, 1); f.edge:SetPoint("TOPLEFT"); f.edge:SetPoint("TOPRIGHT"); f.edge:SetHeight(3)
+  f.title = T.text(f, "page"); f.title:SetPoint("TOPLEFT", 20, -10)
+  f.line = T.text(f, "muted"); f.line:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 1, -4)
+  f.line:SetTextColor(C.text[1], C.text[2], C.text[3]); f.line:SetWordWrap(false)
+  function f:Set(title, line, tint, maxWidth)
+    tint = tint or C.gold
+    local mix = { tint[1] * 0.4 + C.royal[1] * 0.6, tint[2] * 0.4 + C.royal[2] * 0.6, tint[3] * 0.4 + C.royal[3] * 0.6 }
+    self.cloth:SetFill(mix, 0.95, C.royal, 0.95)
+    self.edge:SetVertexColor(tint[1], tint[2], tint[3], 1)
+    self.title:SetText(title)
+    self.line:SetText(line or "")
+    self.line:SetWidth(0)
+    local w = math.max(self.title:GetStringWidth() or 0, (self.line:GetStringWidth() or 0) + 1) + 20 + 50
+    if maxWidth and w > maxWidth then w = maxWidth; self.line:SetWidth(maxWidth - 70) end
+    self:SetWidth(math.max(160, w))
+  end
+  return f
+end
+
+-- States the way the site shows them (docs/design.md §5): a glyph and a word, never colour alone.
+-- T.state("ok" | "wait" | "out" | "need", word)
+local STATE = {
+  ok = { "|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14:0:0|t", T.HEX.ok },
+  wait = { "|TInterface\\RaidFrame\\ReadyCheck-Waiting:14:14:0:0|t", T.HEX.pale },
+  out = { "|TInterface\\RaidFrame\\ReadyCheck-NotReady:14:14:0:0|t", T.HEX.muted },
+  need = { "|T" .. MEDIA .. "diamond:11:11:0:0:32:32:0:32:0:32:192:80:63|t", T.HEX.raids },
+}
+function T.glyph(kind) return (STATE[kind] or STATE.out)[1] end
+function T.state(kind, word)
+  local st = STATE[kind] or STATE.out
+  return st[1] .. " |cff" .. st[2] .. word .. "|r"
 end
 
 -- Icons inside text: a class crest or an item's icon, as a |T...|t escape.
