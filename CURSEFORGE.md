@@ -30,17 +30,14 @@ Any guildmate's full profile: equipped gear with item icons, talents and spec, p
 **Attunements**
 A guild-wide checklist for Onyxia, Molten Core, Blackwing Lair and Naxxramas. It also covers the dungeon keys: UBRS, Scholomance, Stratholme, Blackrock Depths and Dire Maul, plus Molten Core runes.
 
-**Crafters**
-Who can make what. Open your profession window once and your recipes are shared, then search any recipe to see who in the guild knows it.
+**Professions**
+Who can make what, one profession at a time. Open your profession window once and your recipes are shared. Pick a profession to see its recipes and the guildmates who have it, by skill and with who's online; click a crafter for only their recipes, or a recipe to whisper someone who can make it.
 
 **Loot**
-Epic and better drops in raids, and the /rolls for them, recorded by everyone with the addon and merged into one history.
+Epic and better drops in raids, the /rolls for them and how each was decided, recorded by everyone with the addon and merged into one history. **How loot works** has the guild's loot rules. The loot master gets a small window for each epic: post the main-spec / off-spec roll and award it, or send a high-value item to the officers' loot council.
 
 **Calendar** *(raids from perpetua.gg)*
 Upcoming raids with in-game sign-ups (coming, tentative, can't make it, and your role). Officers can schedule a raid from the addon with **New raid**, and put the site's raids into Blizzard's in-game calendar as guild events with one click each, so everyone sees them, addon or not.
-
-**Hide Olympus**
-Hides chat from players in any guild named Olympus and turns away their whispers, guild invites and charters, group invites, trades and duels, all in your own client. Choose which on its page; switched off by default.
 
 **Recipe totals**
 With two or more recipes tracked, the objective tracker gets one more block adding up the reagents they need between them.
@@ -64,8 +61,9 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 | `/ppta` | Open or close the window |
 | `/ppta me` | Your character |
 | `/ppta attune` | Attunements |
-| `/ppta crafters` | Who can make what |
+| `/ppta professions` | Who can make what (`/ppta crafters` works too) |
 | `/ppta loot` | Loot and roll history |
+| `/ppta loot rules` | How loot works |
 | `/ppta raids` | The raid calendar |
 | `/ppta guild` | The guild roster |
 | `/ppta guildui` | Turn the guild window on or off (`on` / `off`) |
@@ -75,7 +73,6 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 | `/ppta sync` | Save for the Perpetua app (reloads your UI) |
 | `/ppta minimap` | Hide or show the minimap button |
 | `/ppta scale 90` | Window size in percent, 70 to 150 (Ctrl + mouse wheel on the window, or Options > AddOns > Perpetua) |
-| `/ppta olympus` | Hide Olympus: choose what to hide from Olympus guilds (`on` / `off` to flip it) |
 | `/ppta help` | List all commands |
 
 `/perpetua` and `/perp` work too.

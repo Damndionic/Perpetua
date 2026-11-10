@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.17.0
+
+- **Professions** (was Crafters): one profession at a time instead of one long list. Professions run down the left with their recipe counts, and under them the guildmates who have the chosen one, highest skill first, with a dot for who's online. Click a crafter to see only their recipes, click again for everyone's, right-click to whisper. Click a recipe to whisper someone online who can make it. A search that finds nothing in this profession jumps to the one with the most matches. `/ppta professions` (or `/ppta crafters`).
+- **A new look to match perpetua.gg**: the sidebar is a column of pennants (the page you're on in solid gold), and each page opens with the site's section banner, crimson for Calendar and Loot.
+- Calendar sign-ups show a tick, a wait or a cross with the word (Coming, Tentative, Can't make it; In, Bench), not colour alone.
+- **How loot works** (Loot page, or `/ppta loot rules`): the guild's loot rules from perpetua.gg/rules. Main spec before off spec; legendaries and high-value items are decided by the officers; no gear-and-go.
+- **For the loot master** (officers on master loot): each epic opens a small window. **Start roll** posts the roll to raid warning (main spec /roll 100, off spec /roll 99), collects the rolls and names the winner, and **Award** hands it over. **Council** tells the raid a high-value item goes to the officers, and records who got it. The Loot history shows how each item was decided.
+- Setup leaves the sidebar once your character is linked on perpetua.gg (`/ppta setup` still opens it).
+- Hide Olympus is gone (they moved to another ruleset), along with `/ppta olympus`.
+
 ## 2.16.0
 
 - **Guild Chat** page (in the sidebar under Guild): the guild chat log Blizzard's guild window has, history from before you logged in included, with an **Officer** tab for officers. Names are clickable (click to whisper, right-click for the member menu), item links show their tooltip, and **Older messages** loads more history. Type in the box at the bottom and press Enter to send. If the game won't let the addon send from there, the message goes into your normal chat box with /g (or /o) in front, and Enter sends it.
