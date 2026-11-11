@@ -52,8 +52,10 @@ local function float(secure, target)
   secure:ClearAllPoints()
   secure:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left * k, bottom * k)
   secure:SetSize(w * k, h * k)
-  -- Top layer, so nothing of ours sits over it (it only shows while the mouse is on our button, which was on top).
-  secure:SetFrameStrata("FULLSCREEN_DIALOG")
+  -- Above every window, in the tooltip layer. Not FULLSCREEN_DIALOG: our dialogs live there and are toplevel, so the
+  -- client raises them over everything in that layer when they show, the secure button included, and the click
+  -- landed on our own button (2.17: Reload needed several clicks). It's invisible and only over our button.
+  secure:SetFrameStrata("TOOLTIP")
   secure:SetFrameLevel(math.min(target:GetFrameLevel() + 50, 9000))
   secure:Show()
 end
@@ -175,6 +177,11 @@ function ns.secureGuildCommand(button, command, title, tip, after)
   -- (then it's armed now and the next click runs it).
   button:HookScript("OnClick", function(self)
     if not command() then return end
+    if ns.DEV then
+      print(("|cffd4af37Perpetua|r (dev): click reached our button, not the secure one (secure shown %s, over us %s, strata %s/%s, level %d/%d)")
+        :format(tostring(action:IsShown()), tostring(hovering == self), action:GetFrameStrata() or "?", self:GetFrameStrata() or "?",
+          action:GetFrameLevel() or -1, self:GetFrameLevel() or -1))
+    end
     if InCombatLockdown() then inCombatNote("That") else rearm(self) end
   end)
 end
