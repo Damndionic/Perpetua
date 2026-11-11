@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.18.0
+
+- **Raid sign-ups for hybrids**: tick every role you can take tonight (Tank, **Off Tank**, Healer, DPS; only the ones your class can play). Your spec's role is your main; officers see the others as roles you can switch to. The Calendar lists everyone under their main role and, dimmed, under the other roles they ticked ("can also", "off tank"). Same on perpetua.gg/raids.
+- **Save & reload**: the Reload button works on the first click (it sometimes needed several).
+
 ## 2.17.0
 
 - **Professions** (was Crafters): one profession at a time instead of one long list. Professions run down the left with their recipe counts, and under them the guildmates who have the chosen one, highest skill first, with a dot for who's online. Click a crafter to see only their recipes, click again for everyone's, right-click to whisper. Click a recipe to whisper someone online who can make it. A search that finds nothing in this profession jumps to the one with the most matches. `/ppta professions` (or `/ppta crafters`).

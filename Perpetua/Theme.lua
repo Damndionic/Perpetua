@@ -670,4 +670,5 @@ function T.dialog(opts)
   f:SetPoint("CENTER", 0, 120)
   f:Show()
   if input then f.edit:SetFocus() end
+  if f.command and f.secured and ns.armSecureCommand then ns.armSecureCommand(f.ok) end
 end

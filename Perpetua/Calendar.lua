@@ -89,12 +89,15 @@ end
 
 local STATUSES = { coming = true, tentative = true, absent = true }
 
-function ns.signUp(eventId, status, role)
+-- roles: { [role] = true } for every role ticked; prefer: the spec's role, the main one when it's ticked.
+-- Saved as r = main role (what older sites read) and rs = all of them ("Tank,Off Tank").
+function ns.signUp(eventId, status, roles, prefer)
   if not STATUSES[status] then return end
   local class = select(2, UnitClass("player"))
-  if role and not ns.canTake(class, role) then role = ns.classRoles(class)[1] end
+  local list, main = ns.orderRoles(class, roles or {}, prefer)
+  if not main then main = ns.classRoles(class)[1]; list = { main } end
   PerpetuaCharDB.signups = PerpetuaCharDB.signups or {}
-  PerpetuaCharDB.signups[eventId] = { s = status, r = role, t = ns.now() }
+  PerpetuaCharDB.signups[eventId] = { s = status, r = main, rs = table.concat(list, ","), t = ns.now() }
   ns.refreshSelf()
 end
 
@@ -107,7 +110,7 @@ function ns.mySignups()
     local finish = ends[tonumber(id)]
     if finish and finish < ns.now() then PerpetuaCharDB.signups[id] = nil
     elseif not finish and ns.now() - (s.t or 0) > 30 * 86400 then PerpetuaCharDB.signups[id] = nil
-    else out[#out + 1] = { e = tonumber(id), s = s.s, r = s.r, t = s.t } end
+    else out[#out + 1] = { e = tonumber(id), s = s.s, r = s.r, rs = s.rs, t = s.t } end
   end
   table.sort(out, function(a, b) return a.e < b.e end)
   return out
@@ -118,13 +121,13 @@ end
 function ns.eventSignups(e)
   local cal = ns.calendar()
   local byName = {}
-  for _, s in ipairs(e.signups or {}) do byName[s.n] = { n = s.n, c = s.c, s = s.s, r = s.r, l = s.l } end
+  for _, s in ipairs(e.signups or {}) do byName[s.n] = { n = s.n, c = s.c, s = s.s, r = s.r, rs = s.rs, l = s.l } end
   for name, rec in pairs(ns.players()) do
     local p = type(rec) == "table" and rec.profile
     for _, s in ipairs(p and p.signups or {}) do
       if s.e == e.id and (s.t or 0) > (cal and cal.t or 0) then
         local cur = byName[name] or { n = name, c = rec.class }
-        cur.s, cur.r, cur.game = s.s, s.r, true
+        cur.s, cur.r, cur.rs, cur.game = s.s, s.r, s.rs, true
         byName[name] = cur
       end
     end
@@ -132,7 +135,7 @@ function ns.eventSignups(e)
   local mine = PerpetuaCharDB.signups and PerpetuaCharDB.signups[e.id]
   if mine and ns.selfName and (mine.t or 0) > (cal and cal.t or 0) then
     local cur = byName[ns.selfName] or { n = ns.selfName, c = select(2, UnitClass("player")) }
-    cur.s, cur.r, cur.game = mine.s, mine.r, true
+    cur.s, cur.r, cur.rs, cur.game = mine.s, mine.r, mine.rs, true
     byName[ns.selfName] = cur
   end
   local list = {}

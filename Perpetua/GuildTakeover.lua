@@ -122,11 +122,28 @@ end
 -- Puts the command button back over our button if the mouse is (still) on it and there's something to run.
 function rearm(target)
   if InCombatLockdown() or not (target and target:IsVisible() and target:IsMouseOver() and target.secureCommand) then return end
-  if hovering then return end
+  -- Another of our buttons has a secure one over it right now: leave it. A stale mark (that button's gone, or the
+  -- mouse left without an OnLeave) mustn't block this one, or clicks only "arm" and never act (2.17: Reload needed
+  -- several clicks).
+  if hovering and hovering ~= target and hovering:IsVisible() and hovering:IsMouseOver() then return end
   local text = target.secureCommand()
   if not text then return end
   action:SetAttribute("macrotext", text)
   float(action, target)
+end
+
+-- A dialog's confirm button gets the secure button the moment the dialog opens, not on the first OnEnter: a click
+-- that comes before the mouse has "entered" (the dialog opened under it, or a quick click) would otherwise land on
+-- our own button and only arm it. Next frame, once the dialog's layout has settled.
+function ns.armSecureCommand(button)
+  C_Timer.After(0, function()
+    if InCombatLockdown() or not (button and button:IsVisible() and button.secureCommand) then return end
+    if hovering and hovering ~= button and hovering:IsVisible() and hovering:IsMouseOver() then return end
+    local text = button.secureCommand()
+    if not text then return end
+    action:SetAttribute("macrotext", text)
+    float(action, button)
+  end)
 end
 
 function ns.opensBlizzardGuild(button, title, tip)

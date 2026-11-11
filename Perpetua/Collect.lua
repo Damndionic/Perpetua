@@ -361,7 +361,7 @@ function ns.summarize(p)
     v = n(p.v), addon = str(p.addon, 24), t = n(p.t), char = out, spec = spec, profs = profs, items = items,
     quests = list(p.quests, 200, n),
     alts = list(p.alts, 30, function(a) return type(a) == "table" and str(a.n) and { n = str(a.n), s = str(a.s), c = str(a.c), sp = str(a.sp), l = n(a.l) } or nil end),
-    signups = list(p.signups, 30, function(x) return type(x) == "table" and n(x.e) and { e = n(x.e), s = str(x.s, 16), r = str(x.r, 16), t = n(x.t) } or nil end),
+    signups = list(p.signups, 30, function(x) return type(x) == "table" and n(x.e) and { e = n(x.e), s = str(x.s, 16), r = str(x.r, 16), rs = str(x.rs, 40), t = n(x.t) } or nil end),
     summary = true,
   }
   local ok, il = pcall(ns.avgItemLevel, p) -- their gear list could be malformed too

@@ -1019,24 +1019,26 @@ local function buildCalendar(page)
   local x = 14
   for _, s in ipairs({ "coming", "tentative", "absent" }) do
     local b = T.button(right, STATUS_TEXT[s], s == "absent" and 118 or 100, function()
-      if cal.selected then ns.signUp(cal.selected, s, cal.role or myRole()); ns.refreshUI(true) end
+      if cal.selected then ns.signUp(cal.selected, s, cal.roleSet or { [myRole()] = true }, myRole()); ns.refreshUI(true) end
     end, "tab")
     b:SetPoint("TOPLEFT", x, -86)
     cal.status[s] = b
     x = x + (s == "absent" and 118 or 100) + 8
   end
+  -- Role toggles: hybrids tick every role they can take tonight (at least one stays on). Placed in renderCalendar.
   cal.roles = {}
-  x = 14
-  for _, r in ipairs({ "Tank", "Healer", "DPS" }) do
-    local b = T.button(right, r, 100, function()
-      cal.role = r
+  for _, r in ipairs(ns.SIGNUP_ROLES) do
+    local b = T.button(right, r, 78, function()
+      local set = {}
+      for k, v in pairs(cal.roleSet or {}) do set[k] = v end
+      set[r] = not set[r] or nil
+      if not next(set) then return end
+      cal.roleSet = set
       local mine = cal.selected and PerpetuaCharDB.signups and PerpetuaCharDB.signups[cal.selected]
-      if mine then ns.signUp(cal.selected, mine.s, r) end
+      if mine then ns.signUp(cal.selected, mine.s, set, myRole()) end
       ns.refreshUI(true)
     end, "tab")
-    b:SetPoint("TOPLEFT", x, -118)
     cal.roles[r] = b
-    x = x + 108
   end
   local area = CreateFrame("Frame", nil, right)
   area:SetPoint("TOPLEFT", 8, -154); area:SetPoint("BOTTOMRIGHT", -4, 6)
@@ -1062,7 +1064,7 @@ local function renderCalendar()
     if e.cancelled == 1 then label = color("7a8298", label .. " (cancelled)") end
     rows[#rows + 1] = {
       cells = { (e.id == cal.selected and color(T.HEX.pale, whenText(e.t)) or whenText(e.t)), label, coming .. "/" .. (e.size or 40) },
-      onClick = function() cal.selected = e.id; cal.role = nil; ns.refreshUI(true) end,
+      onClick = function() cal.selected = e.id; cal.roleSet = nil; ns.refreshUI(true) end,
     }
   end
   -- Raids this officer made in game, still on their way to the site.
@@ -1106,13 +1108,13 @@ local function renderCalendar()
   local e
   for _, x in ipairs(events) do if x.id == cal.selected then e = x end end
   for _, b in pairs(cal.status) do b:SetShown(e ~= nil and e.cancelled ~= 1) end
-  -- Only the roles this class can fill, side by side.
+  -- Only the roles this class can take, side by side.
   local x = 14
-  for _, r in ipairs({ "Tank", "Healer", "DPS" }) do
+  for _, r in ipairs(ns.SIGNUP_ROLES) do
     local b = cal.roles[r]
     local show = e ~= nil and e.cancelled ~= 1 and ns.canTake(myClass(), r)
     b:SetShown(show)
-    if show then b:ClearAllPoints(); b:SetPoint("TOPLEFT", x, -118); x = x + 108 end
+    if show then b:ClearAllPoints(); b:SetPoint("TOPLEFT", x, -118); x = x + 84 end
   end
   if not e then
     cal.title:SetText("NO RAIDS SCHEDULED")
@@ -1127,11 +1129,13 @@ local function renderCalendar()
   local siteMine
   for _, s in ipairs(list) do if s.n == ns.selfName then siteMine = s end end
   local status = mine and mine.s or siteMine and siteMine.s
-  local role = cal.role or mine and mine.r or siteMine and siteMine.r
-  if not (role and ns.canTake(myClass(), role)) then role = myRole() end
-  cal.role = role
+  -- Ticked roles: this visit's clicks, else the saved sign-up's, else the site's, else the spec's role.
+  local set = cal.roleSet or (mine and ns.roleSet(mine.rs, mine.r)) or (siteMine and ns.roleSet(siteMine.rs, siteMine.r)) or {}
+  local ticked = ns.orderRoles(myClass(), set)
+  if #ticked == 0 then set = { [myRole()] = true } end
+  cal.roleSet = set
   for s, b in pairs(cal.status) do b:SetSelected(s == status) end
-  for r, b in pairs(cal.roles) do b:SetSelected(r == role) end
+  for r, b in pairs(cal.roles) do b:SetSelected(set[r] == true) end
   cal.mine:SetText(status and ("You: " .. T.state(STATUS_STATE[status], STATUS_TEXT[status]) .. (mine and (mine.t or 0) > (ns.calendar().t or 0) and "  (goes to the site with the next guild sync)" or ""))
     or "You haven't signed up. Pick one below.")
 
@@ -1139,18 +1143,30 @@ local function renderCalendar()
   if e.notes and e.notes ~= "" then
     for line in (e.notes .. "\n"):gmatch("(.-)\n") do if line ~= "" then C:Para(color(T.HEX.muted, safe(line)), "small") end end
   end
-  local groups = { Tank = {}, Healer = {}, DPS = {} }
+  -- Everyone under their main role; under the other roles they ticked as flex, dimmed (Off Tank counts for Tanks).
+  local groups, flex = { Tank = {}, Healer = {}, DPS = {} }, { Tank = {}, Healer = {}, DPS = {} }
+  local col = function(r) return r == "Off Tank" and "Tank" or r end
   local tentative, absent = {}, {}
   for _, s in ipairs(list) do
+    local set = ns.roleSet(s.rs, s.r)
     local who = T.classIcon(s.c) .. classed(s.n, s.c) .. (s.l == "confirmed" and ("  " .. T.state("ok", "In")) or s.l == "bench" and ("  " .. T.state("wait", "Bench")) or "")
-    if s.s == "coming" then table.insert(groups[s.r] or groups.DPS, who)
+    if s.s == "coming" then
+      local main = groups[col(s.r or "")] and col(s.r) or "DPS"
+      local offMain = main == "Tank" and set["Off Tank"] and not set.Tank
+      table.insert(groups[main], who .. (offMain and color(T.HEX.warm, "  off tank") or ""))
+      for _, r in ipairs({ "Tank", "Healer", "DPS" }) do
+        if r ~= main and (set[r] or (r == "Tank" and set["Off Tank"])) then
+          table.insert(flex[r], color(T.HEX.muted, (r == "Tank" and not set.Tank and "off tank: " or "can also: ")) .. who)
+        end
+      end
     elseif s.s == "tentative" then tentative[#tentative + 1] = who
     else absent[#absent + 1] = who end
   end
   for _, r in ipairs({ "Tank", "Healer", "DPS" }) do
-    C:Heading((r == "DPS" and "DPS" or r .. "s") .. "  " .. #groups[r])
-    if #groups[r] == 0 then C:Line(color(T.HEX.muted, "None yet"), "small") end
+    C:Heading((r == "DPS" and "DPS" or r .. "s") .. "  " .. #groups[r] .. (#flex[r] > 0 and ("  +" .. #flex[r] .. " flex") or ""))
+    if #groups[r] == 0 and #flex[r] == 0 then C:Line(color(T.HEX.muted, "None yet"), "small") end
     for _, w in ipairs(groups[r]) do C:Line(w, "small", nil, 6) end
+    for _, w in ipairs(flex[r]) do C:Line(w, "small", nil, 6) end
   end
   if #tentative > 0 then C:Heading(T.glyph("wait") .. " TENTATIVE  " .. #tentative); for _, w in ipairs(tentative) do C:Line(w, "small", nil, 6) end end
   if #absent > 0 then C:Heading(T.glyph("out") .. " CAN'T MAKE IT  " .. #absent); for _, w in ipairs(absent) do C:Line(w, "small", nil, 6) end end

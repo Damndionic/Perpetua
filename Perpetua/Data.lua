@@ -100,8 +100,34 @@ function ns.classRoles(classFile)
   return ns.CLASS_ROLES[classFile or ""] or { "Tank", "Healer", "DPS" }
 end
 function ns.canTake(classFile, role)
+  if role == "Off Tank" then role = "Tank" end -- any class that can tank can off-tank
   for _, r in ipairs(ns.classRoles(classFile)) do if r == role then return true end end
   return false
+end
+
+-- Raid sign-ups tick every role the player can take (same as SIGNUP_ROLES / signupRoles on the site). The main role
+-- is the spec's when it's ticked, else the first ticked in MAIN_ORDER; the site lists the others as flex.
+ns.SIGNUP_ROLES = { "Tank", "Off Tank", "Healer", "DPS" }
+local MAIN_ORDER = { "Tank", "Healer", "DPS", "Off Tank" }
+function ns.signupRolesFor(classFile)
+  local out = {}
+  for _, r in ipairs(ns.SIGNUP_ROLES) do if ns.canTake(classFile, r) then out[#out + 1] = r end end
+  return out
+end
+-- set: { [role] = true } -> the ticked roles in display order, and the main one (prefer: the spec's role).
+function ns.orderRoles(classFile, set, prefer)
+  local list = {}
+  for _, r in ipairs(ns.SIGNUP_ROLES) do if set[r] and ns.canTake(classFile, r) then list[#list + 1] = r end end
+  local main = prefer and set[prefer] and ns.canTake(classFile, prefer) and prefer or nil
+  if not main then for _, r in ipairs(MAIN_ORDER) do if set[r] and ns.canTake(classFile, r) then main = r break end end end
+  return list, main
+end
+-- "Tank,Off Tank" (or a lone main role from an older sign-up) -> { [role] = true }
+function ns.roleSet(rs, r)
+  local set = {}
+  for x in tostring(rs or ""):gmatch("[^,]+") do set[x] = true end
+  if not next(set) and r then set[r] = true end
+  return set
 end
 
 -- Gathering professions have no recipe window.

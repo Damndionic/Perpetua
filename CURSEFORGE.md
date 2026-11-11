@@ -37,7 +37,7 @@ Who can make what, one profession at a time. Open your profession window once an
 Epic and better drops in raids, the /rolls for them and how each was decided, recorded by everyone with the addon and merged into one history. **How loot works** has the guild's loot rules. The loot master gets a small window for each epic: post the main-spec / off-spec roll and award it, or send a high-value item to the officers' loot council.
 
 **Calendar** *(raids from perpetua.gg)*
-Upcoming raids with in-game sign-ups (coming, tentative, can't make it, and your role). Officers can schedule a raid from the addon with **New raid**, and put the site's raids into Blizzard's in-game calendar as guild events with one click each, so everyone sees them, addon or not.
+Upcoming raids with in-game sign-ups (coming, tentative, can't make it, and every role you can take: tank, off tank, healer, DPS). Officers can schedule a raid from the addon with **New raid**, and put the site's raids into Blizzard's in-game calendar as guild events with one click each, so everyone sees them, addon or not.
 
 **Recipe totals**
 With two or more recipes tracked, the objective tracker gets one more block adding up the reagents they need between them.
