@@ -28,7 +28,7 @@ The message of the day, the guild information and the guild event log.
 Any guildmate's full profile: equipped gear with item icons, talents and spec, professions and skill levels, attunements and reputations.
 
 **Hit list**
-The enemy players you've killed most and the ones who've killed you most, with your killing blows and deaths, for world PvP and battlegrounds apart. On your Character page, your guildmates', and your character's page on perpetua.gg.
+The enemy players you've killed most and the ones who've killed you most, with your killing blows and deaths, for world PvP and battlegrounds apart, plus your duel wins and losses and who you beat and lose to most. On your Character page, your guildmates', and your character's page on perpetua.gg.
 
 **Attunements**
 A guild-wide checklist for Onyxia, Molten Core, Blackwing Lair and Naxxramas. It also covers the dungeon keys: UBRS, Scholomance, Stratholme, Blackrock Depths and Dire Maul, plus Molten Core runes.

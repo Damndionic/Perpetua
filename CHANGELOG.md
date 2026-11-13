@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Hit list**: the addon now keeps track of your PvP fights. The Character page shows the five enemy players you've killed most and the five who've killed you most, with your killing blows and deaths, kept apart for **world PvP** and **battlegrounds**. Guildmates see yours on your Character page, and it shows on your character's page on perpetua.gg. Only killing blows count (yours or your pet's); a death counts when the game's death recap names an enemy player (or, if it can't, when exactly one enemy had you targeted). `/ppta hits` shows your totals.
+- **Duels on the hit list**: a third tab, **Duels**, with your wins and losses and the players you've beaten most and lost to most. Guildmates count. Fleeing a duel counts as a loss.
 
 ## 2.18.0
 

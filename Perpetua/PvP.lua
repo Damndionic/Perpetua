@@ -1,11 +1,14 @@
 -- Hit list: the enemy players this character killed and the ones who killed it, world PvP and battlegrounds kept
--- apart. Shown on the Character page and on the site's character page.
+-- apart, plus duels won and lost (anyone, guildmates included). Shown on the Character page and on the site.
 --
 -- Forever closes the combat log to addons (COMBAT_LOG_EVENT_UNFILTERED has no payload), so this works the way the
 -- Forever port of Spy does, which counted kills and deaths fine on the live client:
 --   * a kill is PARTY_KILL with us (or our pet) as the attacker: killing blows only, by the owner's choice;
 --   * a death is PLAYER_DEAD, the killer read from the death recap (C_DeathRecap) a moment later, or, when the
 --     recap can't say, the one enemy player who had us targeted when we fell (two or more: nobody gets it).
+--   * a duel is the game's own system message ("A has defeated B in a duel", "A has fled from B in a duel": fleeing
+--     loses), counted only when it names us; the opponent's class, level and guild from the unit we challenged or
+--     were challenged by, or any unit of that name in sight.
 -- Names come from the units we've seen (nameplates, target, mouseover), because GetPlayerInfoByGUID doesn't give
 -- the surname. Any value can be secret; ns.readable turns those into nil.
 --
@@ -24,7 +27,7 @@ local SEEN_LIMIT = 1000
 local function db()
   local h = PerpetuaCharDB.hits
   if type(h) ~= "table" or h.v ~= 1 then h = { v = 1 }; PerpetuaCharDB.hits = h end
-  for _, mode in ipairs({ "world", "bg" }) do
+  for _, mode in ipairs({ "world", "bg", "duel" }) do
     h[mode] = h[mode] or { k = {}, d = {}, nk = 0, nd = 0 }
   end
   return h
@@ -42,27 +45,33 @@ end
 
 local seen, seenCount = {}, 0 -- GUID -> { n = full name, c = class, l = level, g = guild, f = faction }
 
-local function remember(unit)
+-- A player unit as { n, c, l, g, f } (old: what we knew before, for what the client won't say right now), and its GUID.
+local function describe(unit, old)
   if not readable(UnitExists(unit)) or not readable(UnitIsPlayer(unit)) then return end
-  if not readable(try(UnitIsEnemy, "player", unit)) then return end
-  local guid = text(UnitGUID(unit))
-  if not guid then return end
   local first, surname = UnitName(unit)
   first = text(first)
   if not first then return end
-  local guild = text(try(GetGuildInfo, unit))
+  local _, classFile = try(UnitClass, unit)
+  local level = num(try(UnitLevel, unit))
+  return {
+    n = ns.fullName(first, ns.FOREVER and text(surname) or nil),
+    c = text(classFile), l = level and level > 0 and level or (old and old.l) or nil,
+    g = text(try(GetGuildInfo, unit)) or (old and old.g), f = text(try(UnitFactionGroup, unit)),
+  }, text(UnitGUID(unit))
+end
+
+local function remember(unit)
+  if not readable(UnitExists(unit)) or not readable(try(UnitIsEnemy, "player", unit)) then return end
+  local guid = text(UnitGUID(unit))
+  if not guid then return end
   local old = seen[guid]
+  local who = describe(unit, old)
+  if not who then return end
   if not old then
     if seenCount >= SEEN_LIMIT then seen, seenCount = {}, 0 end
     seenCount = seenCount + 1
   end
-  local _, classFile = try(UnitClass, unit)
-  local level = num(try(UnitLevel, unit))
-  seen[guid] = {
-    n = ns.fullName(first, ns.FOREVER and text(surname) or nil),
-    c = text(classFile), l = level and level > 0 and level or (old and old.l) or nil,
-    g = guild or (old and old.g), f = text(try(UnitFactionGroup, unit)),
-  }
+  seen[guid] = who
 end
 
 -- What we know about a player GUID, or nil for anything that isn't an enemy player.
@@ -199,7 +208,89 @@ local function onDead()
   C_Timer.After(RECAP_DELAYS[1], function() pcall(resolveDeath, where, targeting, 1) end)
 end
 
+-- ---------- duels ----------
+
+-- Blizzard's duel messages as patterns, with which capture is the winner (%1$s is the winner; where it lands in the
+-- sentence differs by language).
+local function duelPattern(fmt)
+  if type(fmt) ~= "string" then return nil end
+  local order = {}
+  local p = fmt:gsub("%%(%d)%$s", function(i) order[#order + 1] = tonumber(i); return "%s" end)
+  if #order == 0 then order = { 1, 2 } end
+  p = p:gsub("[%(%)%.%+%-%*%?%[%]%^%$]", "%%%0"):gsub("%%s", "(.+)")
+  local winner = order[1] == 1 and 1 or 2
+  -- English says it outright: "X has fled from Y" means Y won, whichever way the arguments are numbered.
+  if fmt:find(" has fled from ", 1, true) then winner = 2 end
+  return { p = "^" .. p .. "$", winner = winner }
+end
+-- The game fills both in with (winner, loser).
+local DUEL_MESSAGES = {
+  duelPattern(DUEL_WINNER_KNOCKOUT or "%1$s has defeated %2$s in a duel"),
+  duelPattern(DUEL_WINNER_RETREAT or "%2$s has fled from %1$s in a duel"),
+}
+
+local opponent -- { who, at }: the player we last challenged or were challenged by
+
+local function sameName(name, who)
+  if not (name and who and who.n) then return false end
+  return who.n == name or who.n:match("^(%S+)") == name or name:match("^(%S+)") == who.n
+end
+
+-- A unit in sight with this name (the message may give the first name only, or "First Surname").
+local function whoByName(name)
+  if opponent and ns.now() - opponent.at < 600 and sameName(name, opponent.who) then return opponent.who end
+  local units = { "target", "focus", "mouseover", "party1", "party2", "party3", "party4" }
+  for i = 1, 40 do units[#units + 1] = "nameplate" .. i end
+  for _, unit in ipairs(units) do
+    local first = readable(UnitExists(unit)) and text(UnitName(unit))
+    if first and (first == name or first == name:match("^(%S+)")) then
+      local who = describe(unit)
+      if who then return who end
+    end
+  end
+  return { n = name }
+end
+
+local function noteOpponent(unit)
+  local who = describe(unit)
+  if who then opponent = { who = who, at = ns.now() } end
+end
+
+local function onDuelRequested(name)
+  name = ns.playerKey(text(name))
+  if not name then return end
+  local who = whoByName(name)
+  opponent = { who = who, at = ns.now() }
+end
+
+local function onSystemMessage(msg)
+  msg = text(msg)
+  if not msg then return end
+  local first, surname = UnitName("player")
+  first = text(first)
+  local me = first and ns.fullName(first, ns.FOREVER and text(surname) or nil)
+  for _, m in ipairs(DUEL_MESSAGES) do
+    local a, b = msg:match(m.p)
+    if a then
+      a, b = ns.playerKey(a), ns.playerKey(b)
+      local winner, loser = a, b
+      if m.winner == 2 then winner, loser = b, a end
+      local isMe = function(n) return n and (n == first or n == me) end
+      if isMe(winner) and loser then record("k", whoByName(loser), "duel")
+      elseif isMe(loser) and winner then record("d", whoByName(winner), "duel") end
+      return
+    end
+  end
+end
+
 -- ---------- for the profile ----------
+
+-- The profile's keys, in the order shown, with their words (the site has the same list in perpetua.js).
+ns.HIT_MODES = {
+  { key = "w", label = "World PvP", nk = "killing blows", nd = "deaths", k = "Killed most", d = "Killed by most" },
+  { key = "b", label = "Battlegrounds", nk = "killing blows", nd = "deaths", k = "Killed most", d = "Killed by most" },
+  { key = "du", label = "Duels", nk = "wins", nd = "losses", k = "Beat most", d = "Lost to most" },
+}
 
 local function top(list)
   local rows = {}
@@ -213,12 +304,13 @@ local function top(list)
   return rows
 end
 
--- { w = { k, d, nk, nd }, b = { ... } }, or nil before the first kill or death.
+-- { w = { k, d, nk, nd }, b = { ... }, du = { ... } }, or nil before the first kill or death. For duels k is the
+-- players beaten and nk the wins, d and nd the losses.
 function ns.hitsForProfile()
   local h = PerpetuaCharDB and PerpetuaCharDB.hits
   if type(h) ~= "table" or h.v ~= 1 then return nil end
   local out
-  for where, key in pairs({ world = "w", bg = "b" }) do
+  for where, key in pairs({ world = "w", bg = "b", duel = "du" }) do
     local m = h[where]
     if m and (m.nk > 0 or m.nd > 0) then
       out = out or {}
@@ -248,7 +340,7 @@ end
 
 local frame = CreateFrame("Frame")
 for _, e in ipairs({ "PARTY_KILL", "PLAYER_DEAD", "NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT",
-  "PLAYER_FOCUS_CHANGED", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD" }) do
+  "PLAYER_FOCUS_CHANGED", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD", "DUEL_REQUESTED", "CHAT_MSG_SYSTEM" }) do
   pcall(frame.RegisterEvent, frame, e)
 end
 frame:SetScript("OnEvent", function(_, event, a, b)
@@ -259,6 +351,8 @@ frame:SetScript("OnEvent", function(_, event, a, b)
   elseif event == "PLAYER_TARGET_CHANGED" then pcall(remember, "target")
   elseif event == "UPDATE_MOUSEOVER_UNIT" then pcall(remember, "mouseover")
   elseif event == "PLAYER_FOCUS_CHANGED" then pcall(remember, "focus")
+  elseif event == "DUEL_REQUESTED" then pcall(onDuelRequested, a)
+  elseif event == "CHAT_MSG_SYSTEM" then pcall(onSystemMessage, a)
   else
     -- Leaving a battleground (or logging in with hits waiting): send what's new. A recap left over from before a
     -- /reload belongs to an earlier death.
@@ -267,6 +361,9 @@ frame:SetScript("OnEvent", function(_, event, a, b)
   end
 end)
 C_Timer.NewTicker(300, function() pcall(flushTry) end)
+-- Challenging someone: StartDuel("target") from the unit menu or /duel.
+if hooksecurefunc and StartDuel then hooksecurefunc("StartDuel", function(unit) pcall(noteOpponent, unit or "target") end) end
 
 ns.hitsForTest = { onPartyKill = onPartyKill, onDead = onDead, remember = remember, seen = function() return seen end,
-  resolveDeath = resolveDeath, flush = function() return flushTry() end }
+  resolveDeath = resolveDeath, flush = function() return flushTry() end, onSystemMessage = onSystemMessage,
+  onDuelRequested = onDuelRequested, noteOpponent = noteOpponent }

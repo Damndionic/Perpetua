@@ -105,7 +105,7 @@ local HELP = {
   { "loot rules", "how loot works" },
   { "attune", "attunements" },
   { "professions", "who can make what, by profession (or /ppta crafters)" },
-  { "hits", "your hit list: PvP kills and deaths recorded so far" },
+  { "hits", "your hit list: PvP kills, deaths and duels recorded so far" },
   { "export", "your export for the site" },
   { "sync", "save for the Perpetua app (reloads your UI)" },
   { "minimap", "hide or show the minimap button" },
@@ -122,9 +122,17 @@ SlashCmdList.PERPETUA = function(msg)
   elseif msg == "hits" then
     -- What the hit list has recorded, and why the last death did or didn't count (for testing in game).
     local h = ns.hitsForProfile and ns.hitsForProfile()
-    local function part(label, m) return m and (label .. " " .. m.nk .. " killing blows, " .. m.nd .. " deaths") or (label .. " nothing yet") end
-    print("|cffd4af37Perpetua|r hit list: " .. part("World PvP", h and h.w) .. "  ·  " .. part("Battlegrounds", h and h.b))
-    if ns.lastHit then print("  last: " .. (ns.lastHit.kind == "k" and "killed " or "killed by ") .. ns.safe(ns.lastHit.name or "someone unnamed") .. " (" .. ns.lastHit.where .. ", " .. ns.ago(ns.lastHit.at) .. ")") end
+    local parts = {}
+    for _, m in ipairs(ns.HIT_MODES) do
+      local x = h and h[m.key]
+      parts[#parts + 1] = x and (m.label .. " " .. x.nk .. " " .. m.nk .. ", " .. x.nd .. " " .. m.nd) or (m.label .. " nothing yet")
+    end
+    print("|cffd4af37Perpetua|r hit list: " .. table.concat(parts, "  ·  "))
+    local last = ns.lastHit
+    if last then
+      local verb = last.where == "duel" and (last.kind == "k" and "beat " or "lost to ") or (last.kind == "k" and "killed " or "killed by ")
+      print("  last: " .. verb .. ns.safe(last.name or "someone unnamed") .. " (" .. last.where .. ", " .. ns.ago(last.at) .. ")")
+    end
     if ns.lastDeath then print("  last death: " .. (ns.lastDeath.name and ns.safe(ns.lastDeath.name) or "no enemy player") .. " (" .. ns.lastDeath.why .. ")") end
     ns.selected = ns.selfName; ns.showTab("Character")
   elseif msg == "export" then ns.showTab("Export"); ns.renderExport(true)

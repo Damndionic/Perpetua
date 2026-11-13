@@ -496,7 +496,7 @@ local function renderCharacter()
   if type(hits) == "table" or name == ns.selfName then
     C:Heading("Hit list")
     if type(hits) ~= "table" then
-      C:Line(color(muted, "No PvP kills or deaths recorded yet."), "small")
+      C:Line(color(muted, "No PvP kills, deaths or duels recorded yet."), "small")
     else
       local function rows(list, empty)
         if type(list) ~= "table" or #list == 0 then C:Line(color(muted, empty), "muted", nil, 8) return end
@@ -505,14 +505,14 @@ local function renderCharacter()
           C:Line(color(muted, i .. ".  ") .. color(ns.classColor(x.c), safe(x.n or "?")) .. extra, "small", nil, 8, color(T.HEX.gold, x.x or 0))
         end
       end
-      for _, m in ipairs({ { "w", "World PvP" }, { "b", "Battlegrounds" } }) do
-        local h = hits[m[1]]
+      for _, m in ipairs(ns.HIT_MODES) do
+        local h = hits[m.key]
         if type(h) == "table" then
           C:Gap(4)
-          C:Line(m[2] .. color(muted, "  ·  " .. (h.nk or 0) .. " killing blows  ·  " .. (h.nd or 0) .. " deaths"), "body")
-          C:Line(color(T.HEX.warm, "Killed most"), "muted")
+          C:Line(m.label .. color(muted, "  ·  " .. (h.nk or 0) .. " " .. m.nk .. "  ·  " .. (h.nd or 0) .. " " .. m.nd), "body")
+          C:Line(color(T.HEX.warm, m.k), "muted")
           rows(h.k, "Nobody yet.")
-          C:Line(color(T.HEX.warm, "Killed by most"), "muted")
+          C:Line(color(T.HEX.warm, m.d), "muted")
           rows(h.d, "Nobody yet.")
         end
       end
