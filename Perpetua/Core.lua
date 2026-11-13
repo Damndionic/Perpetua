@@ -105,6 +105,7 @@ local HELP = {
   { "loot rules", "how loot works" },
   { "attune", "attunements" },
   { "professions", "who can make what, by profession (or /ppta crafters)" },
+  { "hits", "your hit list: PvP kills and deaths recorded so far" },
   { "export", "your export for the site" },
   { "sync", "save for the Perpetua app (reloads your UI)" },
   { "minimap", "hide or show the minimap button" },
@@ -118,6 +119,14 @@ SlashCmdList.PERPETUA = function(msg)
   if msg == "help" or msg == "?" then
     print("|cffd4af37Perpetua|r commands (/perpetua, /perp or /ppta):")
     for _, h in ipairs(HELP) do print("  |cfff2d78c/ppta" .. (h[1] ~= "" and (" " .. h[1]) or "") .. "|r  " .. h[2]) end
+  elseif msg == "hits" then
+    -- What the hit list has recorded, and why the last death did or didn't count (for testing in game).
+    local h = ns.hitsForProfile and ns.hitsForProfile()
+    local function part(label, m) return m and (label .. " " .. m.nk .. " killing blows, " .. m.nd .. " deaths") or (label .. " nothing yet") end
+    print("|cffd4af37Perpetua|r hit list: " .. part("World PvP", h and h.w) .. "  ·  " .. part("Battlegrounds", h and h.b))
+    if ns.lastHit then print("  last: " .. (ns.lastHit.kind == "k" and "killed " or "killed by ") .. ns.safe(ns.lastHit.name or "someone unnamed") .. " (" .. ns.lastHit.where .. ", " .. ns.ago(ns.lastHit.at) .. ")") end
+    if ns.lastDeath then print("  last death: " .. (ns.lastDeath.name and ns.safe(ns.lastDeath.name) or "no enemy player") .. " (" .. ns.lastDeath.why .. ")") end
+    ns.selected = ns.selfName; ns.showTab("Character")
   elseif msg == "export" then ns.showTab("Export"); ns.renderExport(true)
   elseif msg == "sync" then ns.saveAndReload() -- asks; the reload is a click on its button (the game blocks addons reloading)
   elseif msg == "attune" or msg == "attunements" then ns.showTab("Attunements")

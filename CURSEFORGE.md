@@ -27,6 +27,9 @@ The message of the day, the guild information and the guild event log.
 **Character**
 Any guildmate's full profile: equipped gear with item icons, talents and spec, professions and skill levels, attunements and reputations.
 
+**Hit list**
+The enemy players you've killed most and the ones who've killed you most, with your killing blows and deaths, for world PvP and battlegrounds apart. On your Character page, your guildmates', and your character's page on perpetua.gg.
+
 **Attunements**
 A guild-wide checklist for Onyxia, Molten Core, Blackwing Lair and Naxxramas. It also covers the dungeon keys: UBRS, Scholomance, Stratholme, Blackrock Depths and Dire Maul, plus Molten Core runes.
 
@@ -50,6 +53,7 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 - **You only ever send your own character.** A profile is only accepted if the name inside it matches the player who sent it, so nobody can post data under someone else's name.
 - **Light on traffic.** Each character sends a short hello when you log in and every 10 minutes. Full profiles are only sent when something has changed (buffs and food don't count) and someone asks for it, are held back during combat and in raid instances, and are throttled the same way ChatThrottleLib is.
 - **Light on memory.** Guildmates' full profiles are kept compressed and only unpacked when you open their page, and former members' are let go 30 days after they leave.
+- **Hit list updates** ride along with your profile at most every 15 minutes, never mid-battleground.
 - **Never shared:** gold, bags and bank contents, chat and whispers, or anything about your Battle.net account.
 
 ---
@@ -60,6 +64,7 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 |---|---|
 | `/ppta` | Open or close the window |
 | `/ppta me` | Your character |
+| `/ppta hits` | Your hit list totals |
 | `/ppta attune` | Attunements |
 | `/ppta professions` | Who can make what (`/ppta crafters` works too) |
 | `/ppta loot` | Loot and roll history |

@@ -75,7 +75,7 @@ local function accountAlts(me, guild)
 end
 
 local last = {} -- this session's last profile text and recipes change count, to skip unchanged work
-local VOLATILE = { "stats", "res" }
+local VOLATILE = { "stats", "res", "hits" } -- hits: PvP.lua stamps hv (in the fingerprint) when they should go out
 
 -- Re-reads this character and, if anything changed, tells the guild.
 function ns.refreshSelf(quiet)
@@ -101,6 +101,8 @@ function ns.refreshSelf(quiet)
   if #raids > 0 then profile.raids = raids end
   -- A link code from /perpetua link: rides along until guild sync has used it (a week at most).
   local link = PerpetuaDB.link
+  profile.hits = ns.hitsForProfile and ns.hitsForProfile() or nil
+  profile.hv = ns.hitsVersion and ns.hitsVersion() or nil
   if link and link.code and ns.now() - (link.t or 0) < 7 * 86400 then profile.link = link.code else PerpetuaDB.link = nil end
   local players = ns.players()
   local me = players[name] or {}

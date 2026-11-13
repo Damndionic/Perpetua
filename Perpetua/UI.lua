@@ -491,6 +491,33 @@ local function renderCharacter()
       color("6fc8ff", "Frost " .. (r.frost or 0)) .. "   " .. color("b28cff", "Shadow " .. (r.shadow or 0)) .. "   " ..
       color("f0d8ff", "Arcane " .. (r.arcane or 0)), "small")
   end
+  -- Hit list (PvP.lua): your own straight from what's recorded, a guildmate's from their last profile.
+  local hits = name == ns.selfName and ns.hitsForProfile and ns.hitsForProfile() or p.hits
+  if type(hits) == "table" or name == ns.selfName then
+    C:Heading("Hit list")
+    if type(hits) ~= "table" then
+      C:Line(color(muted, "No PvP kills or deaths recorded yet."), "small")
+    else
+      local function rows(list, empty)
+        if type(list) ~= "table" or #list == 0 then C:Line(color(muted, empty), "muted", nil, 8) return end
+        for i, x in ipairs(list) do
+          local extra = x.l and color(muted, "  " .. x.l) or ""
+          C:Line(color(muted, i .. ".  ") .. color(ns.classColor(x.c), safe(x.n or "?")) .. extra, "small", nil, 8, color(T.HEX.gold, x.x or 0))
+        end
+      end
+      for _, m in ipairs({ { "w", "World PvP" }, { "b", "Battlegrounds" } }) do
+        local h = hits[m[1]]
+        if type(h) == "table" then
+          C:Gap(4)
+          C:Line(m[2] .. color(muted, "  ·  " .. (h.nk or 0) .. " killing blows  ·  " .. (h.nd or 0) .. " deaths"), "body")
+          C:Line(color(T.HEX.warm, "Killed most"), "muted")
+          rows(h.k, "Nobody yet.")
+          C:Line(color(T.HEX.warm, "Killed by most"), "muted")
+          rows(h.d, "Nobody yet.")
+        end
+      end
+    end
+  end
 
   -- Right column: talents, professions, attunements, reputation
   C:Col(2)

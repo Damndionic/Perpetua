@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Hit list**: the addon now keeps track of your PvP fights. The Character page shows the five enemy players you've killed most and the five who've killed you most, with your killing blows and deaths, kept apart for **world PvP** and **battlegrounds**. Guildmates see yours on your Character page, and it shows on your character's page on perpetua.gg. Only killing blows count (yours or your pet's); a death counts when the game's death recap names an enemy player (or, if it can't, when exactly one enemy had you targeted). `/ppta hits` shows your totals.
+
 ## 2.18.0
 
 - **Raid sign-ups for hybrids**: tick every role you can take tonight (Tank, **Off Tank**, Healer, DPS; only the ones your class can play). Your spec's role is your main; officers see the others as roles you can switch to. The Calendar lists everyone under their main role and, dimmed, under the other roles they ticked ("can also", "off tank"). Same on perpetua.gg/raids.

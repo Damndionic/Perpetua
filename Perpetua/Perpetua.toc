@@ -19,6 +19,7 @@ Comm.lua
 Calendar.lua
 GameCal.lua
 Loot.lua
+PvP.lua
 RecipeTotals.lua
 Roster.lua
 GuildUI.lua
