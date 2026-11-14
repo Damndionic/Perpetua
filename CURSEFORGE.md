@@ -28,7 +28,7 @@ The message of the day, the guild information and the guild event log.
 Any guildmate's full profile: equipped gear with item icons, talents and spec, professions and skill levels, attunements and reputations.
 
 **Hit list**
-The enemy players you've killed most and the ones who've killed you most, with your killing blows and deaths, for world PvP and battlegrounds apart, plus your duel wins and losses and who you beat and lose to most. On your Character page, your guildmates', and your character's page on perpetua.gg.
+Its own page for the guild's open-world PvP: a ledger of everyone's killing blows and deaths, anyone's hit list a click away (who they kill most, who kills them most, their nemesis and blood feuds), the guild's Most wanted (the enemies who keep killing us, and whether anyone's answered) and favourite targets. Duels are counted separately: wins, losses, who you beat and lose to most. Battlegrounds don't count. The same at perpetua.gg/hit-list.
 
 **Attunements**
 A guild-wide checklist for Onyxia, Molten Core, Blackwing Lair and Naxxramas. It also covers the dungeon keys: UBRS, Scholomance, Stratholme, Blackrock Depths and Dire Maul, plus Molten Core runes.
@@ -64,7 +64,7 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 |---|---|
 | `/ppta` | Open or close the window |
 | `/ppta me` | Your character |
-| `/ppta hits` | Your hit list totals |
+| `/ppta hits` | The Hit List page, plus your totals in chat |
 | `/ppta attune` | Attunements |
 | `/ppta professions` | Who can make what (`/ppta crafters` works too) |
 | `/ppta loot` | Loot and roll history |
