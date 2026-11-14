@@ -346,6 +346,24 @@ local function list(v, max, fn)
   return out
 end
 
+-- The hit list's open-world and duel lists (PvP.lua), kept in the summary so the Hit List page can show every
+-- guildmate's without unpacking their whole profile. Battlegrounds (2.19.0's "b") are left out: they don't count.
+local function hitsSummary(h)
+  if type(h) ~= "table" then return nil end
+  local out
+  for _, key in ipairs({ "w", "du" }) do
+    local m = h[key]
+    if type(m) == "table" then
+      local function rows(l)
+        return list(l, 5, function(r) return type(r) == "table" and str(r.n) and { n = str(r.n), x = n(r.x), c = str(r.c, 16), l = n(r.l), g = str(r.g), t = n(r.t) } or nil end)
+      end
+      out = out or {}
+      out[key] = { k = rows(m.k), d = rows(m.d), nk = n(m.nk) or 0, nd = n(m.nd) or 0 }
+    end
+  end
+  return out
+end
+
 function ns.summarize(p)
   local c, out = type(p.char) == "table" and p.char or {}, {}
   for _, k in ipairs(SUMMARY_CHAR) do out[k] = k == "level" and n(c[k]) or str(c[k]) end
@@ -361,6 +379,7 @@ function ns.summarize(p)
     v = n(p.v), addon = str(p.addon, 24), t = n(p.t), char = out, spec = spec, profs = profs, items = items,
     quests = list(p.quests, 200, n),
     alts = list(p.alts, 30, function(a) return type(a) == "table" and str(a.n) and { n = str(a.n), s = str(a.s), c = str(a.c), sp = str(a.sp), l = n(a.l) } or nil end),
+    hits = hitsSummary(p.hits), hc = 1,
     signups = list(p.signups, 30, function(x) return type(x) == "table" and n(x.e) and { e = n(x.e), s = str(x.s, 16), r = str(x.r, 16), rs = str(x.rs, 40), t = n(x.t) } or nil end),
     summary = true,
   }
@@ -404,6 +423,10 @@ function ns.compactPlayers()
           full.t = full.t or rec.pt
           rec.pz = ns.pack(full)
           rec.profile = ns.summarize(full)
+        elseif type(p) == "table" and p.summary and not p.hc and rec.pz then
+          -- Summaries from before 2.20 have no hit list: take it from the packed profile, once.
+          local full = ns.unpack(rec.pz, 600000)
+          p.hits, p.hc = type(full) == "table" and hitsSummary(full.hits) or nil, 1
         end
         if type(rec.recipes) == "table" then
           rec.rz = ns.pack({ t = rec.rt, r = rec.recipes })

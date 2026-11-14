@@ -491,32 +491,15 @@ local function renderCharacter()
       color("6fc8ff", "Frost " .. (r.frost or 0)) .. "   " .. color("b28cff", "Shadow " .. (r.shadow or 0)) .. "   " ..
       color("f0d8ff", "Arcane " .. (r.arcane or 0)), "small")
   end
-  -- Hit list (PvP.lua): your own straight from what's recorded, a guildmate's from their last profile.
+  -- The hit list has its own page now (Hit List tab); here just the totals and the way there.
   local hits = name == ns.selfName and ns.hitsForProfile and ns.hitsForProfile() or p.hits
-  if type(hits) == "table" or name == ns.selfName then
+  if type(hits) == "table" and (hits.w or hits.du) then
     C:Heading("Hit list")
-    if type(hits) ~= "table" then
-      C:Line(color(muted, "No PvP kills, deaths or duels recorded yet."), "small")
-    else
-      local function rows(list, empty)
-        if type(list) ~= "table" or #list == 0 then C:Line(color(muted, empty), "muted", nil, 8) return end
-        for i, x in ipairs(list) do
-          local extra = x.l and color(muted, "  " .. x.l) or ""
-          C:Line(color(muted, i .. ".  ") .. color(ns.classColor(x.c), safe(x.n or "?")) .. extra, "small", nil, 8, color(T.HEX.gold, x.x or 0))
-        end
-      end
-      for _, m in ipairs(ns.HIT_MODES) do
-        local h = hits[m.key]
-        if type(h) == "table" then
-          C:Gap(4)
-          C:Line(m.label .. color(muted, "  ·  " .. (h.nk or 0) .. " " .. m.nk .. "  ·  " .. (h.nd or 0) .. " " .. m.nd), "body")
-          C:Line(color(T.HEX.warm, m.k), "muted")
-          rows(h.k, "Nobody yet.")
-          C:Line(color(T.HEX.warm, m.d), "muted")
-          rows(h.d, "Nobody yet.")
-        end
-      end
-    end
+    local parts = {}
+    if hits.w then parts[#parts + 1] = (hits.w.nk or 0) .. " killing blows  ·  " .. (hits.w.nd or 0) .. " deaths" end
+    if hits.du then parts[#parts + 1] = (hits.du.nk or 0) .. "-" .. (hits.du.nd or 0) .. " in duels" end
+    C:Line(table.concat(parts, "  ·  "), "small")
+    C:Action("See " .. (name == ns.selfName and "your" or "their") .. " hit list", function() ns.showHitList(name) end)
   end
 
   -- Right column: talents, professions, attunements, reputation
@@ -555,6 +538,190 @@ local function renderCharacter()
       if x.v and x.m and x.m > 0 then C:Bar(safe(x.n), standing, x.v / x.m) else C:Line(safe(x.n) .. "  " .. standing, "small") end
     end
   end
+end
+
+-- ---------- Hit List tab ----------
+-- The guild's open-world PvP (and duels, kept apart): everyone's totals, the leaderboard, the enemies who kill us
+-- most, and anyone's own hit list (click a name). Battlegrounds don't count (PvP.lua). Guildmates' lists come from
+-- their last profile (top five per list), yours straight from what's recorded.
+
+local hl = { mode = "w" }
+
+local VIEWS = { { "w", "Open world" }, { "du", "Duels" }, { "wanted", "Most wanted" } }
+
+local function buildHitList(page)
+  hl.modes = {}
+  local x = 2
+  for _, v in ipairs(VIEWS) do
+    local b = T.button(page, v[2], 124, function() hl.mode = v[1]; ns.refreshUI(true) end, "tab")
+    b:SetPoint("TOPLEFT", x, 0)
+    hl.modes[v[1]] = b
+    x = x + 130
+  end
+  hl.site = T.button(page, "Open on the site", 150, function()
+    T.copyBox("The hit list on the site", "https://" .. ns.SITE .. "/hit-list" .. (hl.slug and ("/" .. hl.slug) or ""))
+  end, "tab")
+  hl.site:SetPoint("TOPRIGHT", -26, 0)
+  local area = CreateFrame("Frame", nil, page)
+  area:SetPoint("TOPLEFT", 0, -38); area:SetPoint("BOTTOMRIGHT")
+  hl.canvas = Canvas(area)
+end
+
+-- Everyone with a record in this mode: { name, class, h }, you included even before your profile goes out.
+local function fighters(mode)
+  local out, seenSelf = {}, false
+  local function add(name, class, hits)
+    if type(hits) == "table" and type(hits[mode]) == "table" then out[#out + 1] = { name = name, class = class, h = hits[mode] } end
+  end
+  for _, e in ipairs(everyone(false)) do
+    if e.name == ns.selfName then seenSelf = true; add(e.name, e.class, ns.hitsForProfile and ns.hitsForProfile())
+    else add(e.name, e.class, e.profile and e.profile.hits) end
+  end
+  if not seenSelf and ns.selfName then
+    local _, classFile = try(UnitClass, "player")
+    add(ns.selfName, classFile, ns.hitsForProfile and ns.hitsForProfile())
+  end
+  table.sort(out, function(a, b)
+    if (a.h.nk or 0) ~= (b.h.nk or 0) then return (a.h.nk or 0) > (b.h.nk or 0) end
+    if (a.h.nd or 0) ~= (b.h.nd or 0) then return (a.h.nd or 0) < (b.h.nd or 0) end
+    return a.name < b.name
+  end)
+  return out
+end
+
+-- Enemies summed over everyone's top fives: { n, c, l, x, lists = how many hit lists they're on, first, t }.
+-- Top five only, so the sums are floors: "on 3 hit lists", never "killed 3 of us".
+local function tallyEnemies(list, which)
+  local by, rows = {}, {}
+  for _, f in ipairs(list) do
+    for _, r in ipairs(type(f.h[which]) == "table" and f.h[which] or {}) do
+      if r.n then
+        local t = by[r.n]
+        if not t then t = { n = r.n, x = 0, lists = 0 }; by[r.n] = t; rows[#rows + 1] = t end
+        t.x, t.lists, t.first = t.x + (r.x or 0), t.lists + 1, t.first or f.name
+        t.c, t.l, t.g, t.t = r.c or t.c, math.max(r.l or 0, t.l or 0), r.g or t.g, math.max(r.t or 0, t.t or 0)
+      end
+    end
+  end
+  table.sort(rows, function(a, b)
+    if a.x ~= b.x then return a.x > b.x end
+    if a.lists ~= b.lists then return a.lists > b.lists end
+    return a.n < b.n
+  end)
+  return rows, by
+end
+
+local function firstName(n) return safe((n or ""):match("^(%S+)") or n or "") end
+local function enemyText(r) return color(ns.classColor(r.c), safe(r.n or "?")) .. (r.l and r.l > 0 and color(T.HEX.muted, "  " .. r.l) or "") end
+
+local function renderHitList()
+  local C, muted, gold = hl.canvas, T.HEX.muted, T.HEX.gold
+  C:Reset()
+  for key, b in pairs(hl.modes) do b:SetSelected(key == hl.mode) end
+  local mode = hl.mode == "du" and "du" or "w"
+  local m
+  for _, x in ipairs(ns.HIT_MODES) do if x.key == mode then m = x end end
+  local duel = mode == "du"
+  local list = fighters(mode)
+  local nk, nd = 0, 0
+  for _, f in ipairs(list) do nk, nd = nk + (f.h.nk or 0), nd + (f.h.nd or 0) end
+  -- Raw counts in the header; no K/D (killing blows over deaths isn't one).
+  ns.setStats({ { nk, duel and "duels won" or "killing blows", "ok" }, { nd, duel and "lost" or "deaths" }, { #list, duel and "duellists" or "fighters" } })
+
+  if hl.mode == "wanted" then
+    hl.slug = nil
+    local wanted = tallyEnemies(list, "d")
+    local _, killed = tallyEnemies(list, "k")
+    C:Col(1)
+    C:Heading("Most wanted")
+    C:Line(color(muted, "The enemies who keep killing us. Kill on sight."), "muted")
+    if #wanted == 0 then C:Line(color(muted, "Nobody yet. Keep it that way."), "small") end
+    for i = 1, math.min(#wanted, 12) do
+      local r = wanted[i]
+      local answer = killed[r.n]
+      C:Line(color(muted, i .. ".  ") .. enemyText(r), "small", nil, nil,
+        color(gold, r.x) .. color(muted, "  ·  " .. r.lists .. (r.lists == 1 and " list" or " lists")))
+      C:Line(answer and color(T.HEX.ok, "Answered: " .. answer.x .. (answer.lists > 1 and (" by " .. answer.lists .. " of us") or (" by " .. firstName(answer.first))))
+        or color("ff8a7a", "Unanswered"), "muted", nil, 22)
+    end
+    C:Col(2)
+    C:Heading("Favourite targets")
+    C:Line(color(muted, "The enemies we've put down the most."), "muted")
+    local targets = tallyEnemies(list, "k")
+    if #targets == 0 then C:Line(color(muted, "Nobody yet."), "small") end
+    for i = 1, math.min(#targets, 12) do
+      local r = targets[i]
+      C:Line(color(muted, i .. ".  ") .. enemyText(r), "small", nil, nil,
+        color(gold, r.x) .. color(muted, "  ·  " .. (r.lists == 1 and firstName(r.first) or (r.lists .. " of us"))))
+    end
+    return
+  end
+
+  -- Whose hit list: the one clicked, else yours, else the leader's.
+  local pick
+  for _, f in ipairs(list) do if f.name == hl.who then pick = f end end
+  if not pick then for _, f in ipairs(list) do if f.name == ns.selfName then pick = f end end end
+  pick = pick or list[1]
+  hl.slug = pick and pick.name:gsub(" ", "-") or nil
+
+  -- Left: the ledger, everyone with a record (the leaderboard and the way to anyone's list).
+  C:Col(1)
+  C:Heading(duel and "Duel ladder" or "The ledger")
+  if #list == 0 then
+    C:Line(color(muted, duel and "No duels recorded in the guild yet." or "The ledger is empty. Go kill someone."), "small")
+  end
+  for i, f in ipairs(list) do
+    local mark = pick and f.name == pick.name and color(gold, ">  ") or color(muted, (#list >= 5 and (i .. ".  ") or "   "))
+    local l = C:Line(mark .. classed(f.name, f.class) .. (f.name == ns.selfName and color(gold, "  *") or ""), "small", nil, nil,
+      color(gold, f.h.nk or 0) .. color(muted, " - " .. (f.h.nd or 0)))
+    l.onClick = function() hl.who = f.name; ns.refreshUI(true) end
+  end
+  if #list > 0 then C:Line(color(muted, (duel and "Won - lost" or "Killing blows - deaths") .. ". Click anyone for their hit list."), "muted") end
+
+  -- Right: the dossier.
+  C:Col(2)
+  if not pick then
+    C:Heading("Your hit list")
+    C:Line(color(muted, "You're not on the board. Go fix that."), "small")
+    return
+  end
+  local h = pick.h
+  local k, d = h.nk or 0, h.nd or 0
+  C:Heading(pick.name == ns.selfName and "Your hit list" or (firstName(pick.name) .. "'s hit list"))
+  C:Line(classed(pick.name, pick.class), "body")
+  C:Bar(color(gold, k) .. " " .. m.nk, d .. " " .. m.nd, k + d > 0 and k / (k + d) or 0)
+  -- Nemesis (top of killed by), and a feud: the same player on both lists, as a scoreline.
+  local killedBy = type(h.d) == "table" and h.d or {}
+  local killedList = type(h.k) == "table" and h.k or {}
+  if killedBy[1] then C:Line(color(T.HEX.warm, duel and "Bogey" or "Nemesis") .. "   " .. enemyText(killedBy[1]), "small", nil, nil, color(gold, "x" .. (killedBy[1].x or 0))) end
+  local mine = {}
+  for _, r in ipairs(killedList) do if r.n then mine[r.n] = r.x or 0 end end
+  for _, r in ipairs(killedBy) do
+    if r.n and mine[r.n] then
+      local us, them = mine[r.n], r.x or 0
+      C:Line(color(T.HEX.warm, duel and "Grudge" or "Blood feud") .. "   " .. color(ns.classColor(r.c), safe(r.n)), "small", nil, nil,
+        color(us >= them and T.HEX.ok or "ff8a7a", us .. " - " .. them))
+      break
+    end
+  end
+  for _, part in ipairs({ { killedList, m.k }, { killedBy, m.d } }) do
+    C:Gap(4)
+    C:Line(color(T.HEX.warm, part[2]), "muted")
+    if #part[1] == 0 then C:Line(color(muted, part[1] == killedList and "No blood yet." or "Nobody has managed it yet."), "muted", nil, 8) end
+    for i, x in ipairs(part[1]) do
+      C:Line(color(muted, i .. ".  ") .. enemyText(x) .. (x.g and color(muted, "  <" .. safe(x.g) .. ">") or ""), "small", nil, 8, color(gold, "x" .. (x.x or 0)))
+    end
+  end
+  if pick.name ~= ns.selfName then
+    C:Gap(6)
+    C:Action("Their character page", function() ns.selected = pick.name; ns.showTab("Character") end)
+  end
+end
+
+-- Open the Hit List on someone's list (the Character page's link, /ppta hits).
+function ns.showHitList(name)
+  hl.who = name
+  ns.showTab("Hit List")
 end
 
 -- ---------- Attunements tab ----------
@@ -1607,6 +1774,7 @@ end
 -- The sidebar, in groups: the guild, you, and reference pages.
 local TABS = {
   { "Guild", buildGuild, renderGuild, group = "Guild" },
+  { "Hit List", buildHitList, renderHitList, group = "Guild" }, -- second: a PvP server, the fights come first
   { "Guild Chat", function(page) ns.buildGuildChat(page) end, function() ns.renderGuildChat() end, group = "Guild" }, -- GuildChat.lua
   { "Guild Info", function(page) ns.buildGuildInfo(page) end, function() ns.renderGuildInfo() end, group = "Guild", newGuild = true }, -- with the New guild window
   { "Calendar", buildCalendar, renderCalendar, group = "Guild" },
@@ -1623,6 +1791,7 @@ local TABS = {
 
 local NAV = {
   Guild = { "INV_BannerPVP_02", "Ranks, notes, specs, gear and professions" }, -- short: the numbers sit beside it
+  ["Hit List"] = { "Ability_DualWield", "Open-world kills, the enemies who kill us, and duels" },
   ["Guild Chat"] = { "INV_Scroll_03", "Guild and officer chat, with the history" },
   ["Guild Info"] = { "INV_Misc_Note_01", "Message of the day, guild information and the guild log" },
   Character = { "INV_Chest_Plate16", "Gear, talents, professions and more" },
@@ -1639,7 +1808,7 @@ local NAV = {
 -- ns.setStats({ { 42, "members" }, { 12, "online", "ok" } }); pages that don't, show none.
 local BANNER_X, STATS_RIGHT = 196 + 22, 1020 - 26 -- where the banner starts / the numbers end
 -- Section tints (the site's docs/design.md §2): raids and loot are crimson, the rest gold.
-local SECTION = { Calendar = T.C.raids, Loot = T.C.raids }
+local SECTION = { Calendar = T.C.raids, Loot = T.C.raids, ["Hit List"] = T.C.raids }
 local function fitBanner(statsWidth)
   local name = main.bannerFor
   if not name then return end
@@ -1923,7 +2092,7 @@ function ns.refreshUI(now)
 end
 ns.fire = function() ns.refreshUI() end
 function ns.currentTabForTest() return current end -- for the test harness
-ns.uiForTest = { char = char, cal = cal, tabs = tabs }
+ns.uiForTest = { char = char, cal = cal, tabs = tabs, hl = hl }
 
 function ns.toggle(tab)
   if main and main:IsShown() and (not tab or tab == current) then main:Hide() return end

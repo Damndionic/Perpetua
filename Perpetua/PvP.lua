@@ -1,5 +1,7 @@
--- Hit list: the enemy players this character killed and the ones who killed it, world PvP and battlegrounds kept
--- apart, plus duels won and lost (anyone, guildmates included). Shown on the Character page and on the site.
+-- Hit list: the enemy players this character killed and the ones who killed it in the open world, plus duels won and
+-- lost (anyone, guildmates included). Battlegrounds and arenas don't count: open-world kills mean more (owner,
+-- 2026-11-14; 2.19.0 kept a battleground list, which stays in PerpetuaCharDB.hits.bg but is no longer shown or sent).
+-- Shown on the Hit List page and on the site (perpetua.gg/hit-list).
 --
 -- Forever closes the combat log to addons (COMBAT_LOG_EVENT_UNFILTERED has no payload), so this works the way the
 -- Forever port of Spy does, which counted kills and deaths fine on the live client:
@@ -27,17 +29,25 @@ local SEEN_LIMIT = 1000
 local function db()
   local h = PerpetuaCharDB.hits
   if type(h) ~= "table" or h.v ~= 1 then h = { v = 1 }; PerpetuaCharDB.hits = h end
-  for _, mode in ipairs({ "world", "bg", "duel" }) do
+  for _, mode in ipairs({ "world", "duel" }) do
     h[mode] = h[mode] or { k = {}, d = {}, nk = 0, nd = 0 }
   end
   return h
 end
 
--- world / bg, or nil where we don't count (dungeons, raids: no enemy players there, and mind control would confuse it).
-local function mode()
+local function instanceKind()
   local _, kind = try(IsInInstance)
-  kind = readable(kind)
-  if kind == "pvp" or kind == "arena" then return "bg" end
+  return readable(kind)
+end
+local function inBattleground()
+  local kind = instanceKind()
+  return kind == "pvp" or kind == "arena"
+end
+
+-- "world", or nil where we don't count: battlegrounds and arenas (by choice), dungeons and raids (no enemy players
+-- there, and mind control would confuse it).
+local function mode()
+  local kind = instanceKind()
   if kind == nil or kind == "none" then return "world" end
 end
 
@@ -287,8 +297,7 @@ end
 
 -- The profile's keys, in the order shown, with their words (the site has the same list in perpetua.js).
 ns.HIT_MODES = {
-  { key = "w", label = "World PvP", nk = "killing blows", nd = "deaths", k = "Killed most", d = "Killed by most" },
-  { key = "b", label = "Battlegrounds", nk = "killing blows", nd = "deaths", k = "Killed most", d = "Killed by most" },
+  { key = "w", label = "Open world", nk = "killing blows", nd = "deaths", k = "Killed most", d = "Killed by most" },
   { key = "du", label = "Duels", nk = "wins", nd = "losses", k = "Beat most", d = "Lost to most" },
 }
 
@@ -304,13 +313,13 @@ local function top(list)
   return rows
 end
 
--- { w = { k, d, nk, nd }, b = { ... }, du = { ... } }, or nil before the first kill or death. For duels k is the
+-- { w = { k, d, nk, nd }, du = { ... } }, or nil before the first kill or death. For duels k is the
 -- players beaten and nk the wins, d and nd the losses.
 function ns.hitsForProfile()
   local h = PerpetuaCharDB and PerpetuaCharDB.hits
   if type(h) ~= "table" or h.v ~= 1 then return nil end
   local out
-  for where, key in pairs({ world = "w", bg = "b", duel = "du" }) do
+  for where, key in pairs({ world = "w", duel = "du" }) do
     local m = h[where]
     if m and (m.nk > 0 or m.nd > 0) then
       out = out or {}
@@ -330,7 +339,7 @@ end
 -- (every kill there would have the guild asking for the profile mid-fight).
 function flushTry()
   local h = PerpetuaCharDB and PerpetuaCharDB.hits
-  if type(h) ~= "table" or not h.dirty or mode() == "bg" then return end
+  if type(h) ~= "table" or not h.dirty or inBattleground() then return end
   if h.flushed and ns.now() - h.flushed < FLUSH_EVERY then return end
   h.flushed, h.dirty = ns.now(), nil
   if ns.scheduleRefresh then ns.scheduleRefresh(10) end

@@ -105,7 +105,7 @@ local HELP = {
   { "loot rules", "how loot works" },
   { "attune", "attunements" },
   { "professions", "who can make what, by profession (or /ppta crafters)" },
-  { "hits", "your hit list: PvP kills, deaths and duels recorded so far" },
+  { "hits", "the hit list: open-world kills, deaths and duels, the guild's and yours" },
   { "export", "your export for the site" },
   { "sync", "save for the Perpetua app (reloads your UI)" },
   { "minimap", "hide or show the minimap button" },
@@ -134,7 +134,7 @@ SlashCmdList.PERPETUA = function(msg)
       print("  last: " .. verb .. ns.safe(last.name or "someone unnamed") .. " (" .. last.where .. ", " .. ns.ago(last.at) .. ")")
     end
     if ns.lastDeath then print("  last death: " .. (ns.lastDeath.name and ns.safe(ns.lastDeath.name) or "no enemy player") .. " (" .. ns.lastDeath.why .. ")") end
-    ns.selected = ns.selfName; ns.showTab("Character")
+    ns.showHitList(ns.selfName)
   elseif msg == "export" then ns.showTab("Export"); ns.renderExport(true)
   elseif msg == "sync" then ns.saveAndReload() -- asks; the reload is a click on its button (the game blocks addons reloading)
   elseif msg == "attune" or msg == "attunements" then ns.showTab("Attunements")
