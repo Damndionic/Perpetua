@@ -672,11 +672,14 @@ local function renderHitList()
   end
   for i, f in ipairs(list) do
     local mark = pick and f.name == pick.name and color(gold, ">  ") or color(muted, (#list >= 5 and (i .. ".  ") or "   "))
-    local l = C:Line(mark .. classed(f.name, f.class) .. (f.name == ns.selfName and color(gold, "  *") or ""), "small", nil, nil,
+    -- Survival rate (duels: win rate): killing blows out of killing blows + deaths, beside the name.
+    local fights = (f.h.nk or 0) + (f.h.nd or 0)
+    local rate = fights > 0 and color(T.HEX.warm, "  " .. math.floor(100 * (f.h.nk or 0) / fights + 0.5) .. "%") or ""
+    local l = C:Line(mark .. classed(f.name, f.class) .. rate .. (f.name == ns.selfName and color(gold, "  *") or ""), "small", nil, nil,
       color(gold, f.h.nk or 0) .. color(muted, " - " .. (f.h.nd or 0)))
     l.onClick = function() hl.who = f.name; ns.refreshUI(true) end
   end
-  if #list > 0 then C:Line(color(muted, (duel and "Won - lost" or "Killing blows - deaths") .. ". Click anyone for their hit list."), "muted") end
+  if #list > 0 then C:Line(color(muted, (duel and "Won - lost, win rate %" or "Kills - deaths, survival %") .. ". Click anyone for their list."), "muted") end
 
   -- Right: the dossier.
   C:Col(2)
