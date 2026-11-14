@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.20.0
+
+- **Hit List page**: the hit list has its own page in the sidebar, right under Guild. **The ledger** lists everyone in the guild with a record, with their killing blows, deaths and survival rate (the share of their fights that ended with the other player dead). Click anyone to see their hit list beside it: who they kill most, who kills them most, their **nemesis**, and any **blood feud** (an enemy you've both killed each other, as a score). **Most wanted** adds up the enemies who keep killing us, and shows whether anyone's paid them back yet; **Favourite targets** shows the enemies we've put down most. Same at perpetua.gg/hit-list.
+- **Open world only**: battlegrounds and arenas no longer count toward the hit list. Open-world kills mean more. **Duels** stay, counted separately (wins, losses, win rate).
+- The Character page now shows just your hit list totals, with a link to the Hit List page. `/ppta hits` opens the Hit List page.
+
 ## 2.19.0
 
 - **Hit list**: the addon now keeps track of your PvP fights. The Character page shows the five enemy players you've killed most and the five who've killed you most, with your killing blows and deaths, kept apart for **world PvP** and **battlegrounds**. Guildmates see yours on your Character page, and it shows on your character's page on perpetua.gg. Only killing blows count (yours or your pet's); a death counts when the game's death recap names an enemy player (or, if it can't, when exactly one enemy had you targeted). `/ppta hits` shows your totals.
