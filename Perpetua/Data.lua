@@ -13,7 +13,7 @@ ns.GUILD = "Perpetua" -- the addon only works for characters in this guild (ns.l
 ns.RAIDS = {
   { "Barrow Deeps", 10 }, { "Hyjal Summit", 20 }, { "Onyxia's Lair", 40 },
   { "Molten Core", 40 }, { "Blackwing Lair", 40 }, { "Zul'Gurub", 20 }, { "Ruins of Ahn'Qiraj", 20 },
-  { "Temple of Ahn'Qiraj", 40 }, { "Naxxramas", 40 }, { "Dungeon", 5 }, { "Other", 40 },
+  { "Temple of Ahn'Qiraj", 40 }, { "Naxxramas", 40 }, { "Dungeon", 5 }, { "Guild Meeting", 100 }, { "Other", 40 },
 }
 
 -- quests: any one completed counts; per faction where the two sides differ. items: holding one counts.
