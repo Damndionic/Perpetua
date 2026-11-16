@@ -1,11 +1,12 @@
 # Changelog
 
-## 2.22.0
+## 2.22.1
 
 - **Shit List**: officers can mark enemy players. Right-click someone's portrait (or their name in chat, or in the group and raid lists) and choose **Add to the Shit List**; the name comes from them, so you only type the reason. They show up for everyone in the guild who has the addon:
   - **Tooltips**: mousing over them shows a big red SHIT LIST banner, the reason and who added them, and the tooltip border turns red.
   - **Group finder**: any group with someone from the list in it is marked in red, and the group's tooltip names who it is and why.
   - **Hit List page**: a new **Shit List** view lists everyone with their reasons. The list is on perpetua.gg/hit-list too.
+- Who belongs on it: terrible attitudes, ninja looters, scammers, griefers, and anyone who's just bad to play with.
 - The list is shared through guild sync, and only lists sent by an officer are accepted, so nobody else can add or remove names. Officers can also use `/ppta shitlist add First Surname - reason` and `/ppta shitlist remove First Surname`.
 
 ## 2.21.0

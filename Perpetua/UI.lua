@@ -631,6 +631,7 @@ local function renderShitList(C)
   hl.slug = nil
   C:Col(1)
   C:Heading("The Shit List")
+  C:Line(color(muted, "Players we don't group with: terrible attitudes, ninja looters, scammers, griefers, and anyone who's just bad to play with. Don't invite them, don't join their groups, don't trade with them."), "muted")
   C:Line(color(muted, "Marked by the officers. They show in red in tooltips and the group finder."), "muted")
   if #list == 0 then C:Line(color(muted, "Nobody yet."), "small") end
   for _, e in ipairs(list) do
