@@ -329,6 +329,18 @@ function ns.hitsForProfile()
   return out
 end
 
+-- What goes in the profile: the hit list as it was at the last flush, not as it is now. The profile's version (and
+-- its time stamp, which the site uses to pick the newest copy) only moves when the stamp does, so between flushes
+-- every guildmate, and every officer's sync app, must hold the same hits for the same version. Sending the live list
+-- let two copies with the same time stamp disagree, and the site showed whichever was uploaded last. You still see
+-- your own live numbers in game (ns.hitsForProfile).
+function ns.hitsForSend()
+  local h = PerpetuaCharDB and PerpetuaCharDB.hits
+  if type(h) ~= "table" or h.v ~= 1 then return nil end
+  if h.flushed and h.sent == nil then h.sent = ns.hitsForProfile() or false end -- saved before 2.21: start from now
+  return h.sent or nil
+end
+
 -- The stamp that goes in the profile's fingerprint.
 function ns.hitsVersion()
   local h = PerpetuaCharDB and PerpetuaCharDB.hits
@@ -342,6 +354,7 @@ function flushTry()
   if type(h) ~= "table" or not h.dirty or inBattleground() then return end
   if h.flushed and ns.now() - h.flushed < FLUSH_EVERY then return end
   h.flushed, h.dirty = ns.now(), nil
+  h.sent = ns.hitsForProfile() or false -- the snapshot this stamp stands for
   if ns.scheduleRefresh then ns.scheduleRefresh(10) end
 end
 

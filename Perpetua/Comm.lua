@@ -101,7 +101,7 @@ function ns.refreshSelf(quiet)
   if #raids > 0 then profile.raids = raids end
   -- A link code from /perpetua link: rides along until guild sync has used it (a week at most).
   local link = PerpetuaDB.link
-  profile.hits = ns.hitsForProfile and ns.hitsForProfile() or nil
+  profile.hits = ns.hitsForSend and ns.hitsForSend() or nil -- as of the last flush (hv), see PvP.lua
   profile.hv = ns.hitsVersion and ns.hitsVersion() or nil
   if link and link.code and ns.now() - (link.t or 0) < 7 * 86400 then profile.link = link.code else PerpetuaDB.link = nil end
   local players = ns.players()
