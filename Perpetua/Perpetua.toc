@@ -21,6 +21,7 @@ GameCal.lua
 Loot.lua
 PvP.lua
 HitBook.lua
+ShitList.lua
 RecipeTotals.lua
 Roster.lua
 GuildUI.lua

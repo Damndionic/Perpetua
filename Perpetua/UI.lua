@@ -547,7 +547,7 @@ end
 
 local hl = { mode = "w" }
 
-local VIEWS = { { "w", "Open world" }, { "du", "Duels" }, { "wanted", "Most wanted" } }
+local VIEWS = { { "w", "Open world" }, { "du", "Duels" }, { "wanted", "Most wanted" }, { "shit", "Shit List" } }
 
 local function buildHitList(page)
   hl.modes = {}
@@ -622,10 +622,43 @@ end
 local function firstName(n) return safe((n or ""):match("^(%S+)") or n or "") end
 local function enemyText(r) return color(ns.classColor(r.c), safe(r.n or "?")) .. (r.l and r.l > 0 and color(T.HEX.muted, "  " .. r.l) or "") end
 
+-- The Shit List view (ShitList.lua): everyone the officers have marked, with why.
+local function renderShitList(C)
+  local muted, red = T.HEX.muted, "ff4040"
+  local list = ns.shitlistEntries()
+  local officer = ns.canEditShitlist()
+  ns.setStats({ { #list, "on the list" } })
+  hl.slug = nil
+  C:Col(1)
+  C:Heading("The Shit List")
+  C:Line(color(muted, "Marked by the officers. They show in red in tooltips and the group finder."), "muted")
+  if #list == 0 then C:Line(color(muted, "Nobody yet."), "small") end
+  for _, e in ipairs(list) do
+    local l = C:Line(color(red, safe(e.n)), "small", nil, nil,
+      color(muted, (e.by and (firstName(e.by) .. "  ·  ") or "") .. (e.at and ns.ago(e.at) or "")))
+    if officer then l.onClick = function() ns.promptShitlistRemove(e) end end
+    C:Line(e.r and color("ffb0a8", safe(e.r)) or color(muted, "No reason given."), "muted", nil, 22)
+  end
+  if officer and #list > 0 then C:Line(color(muted, "Click a name to take them off."), "muted") end
+  C:Col(2)
+  C:Heading(officer and "Add someone" or "How it works")
+  if officer then
+    C:Action("Add to the Shit List", function() ns.promptShitlistAdd() end)
+    C:Gap(4)
+    C:Line(color(muted, "Or right-click their portrait or name in chat: \"Add to the Shit List\". Your target fills in the name."), "muted")
+    C:Line(color(muted, "/ppta shitlist add First Surname - why"), "muted")
+  else
+    C:Line(color(muted, "Officers keep this list. Right-click someone and tell an officer if they belong on it."), "muted")
+  end
+  C:Gap(6)
+  C:Line(color(muted, "The list goes to everyone in the guild with the addon, and to the site."), "muted")
+end
+
 local function renderHitList()
   local C, muted, gold = hl.canvas, T.HEX.muted, T.HEX.gold
   C:Reset()
   for key, b in pairs(hl.modes) do b:SetSelected(key == hl.mode) end
+  if hl.mode == "shit" then renderShitList(C) return end
   local mode = hl.mode == "du" and "du" or "w"
   local m
   for _, x in ipairs(ns.HIT_MODES) do if x.key == mode then m = x end end
@@ -727,6 +760,11 @@ local function renderHitList()
     C:Gap(6)
     C:Action("Their character page", function() ns.selected = pick.name; ns.showTab("Character") end)
   end
+end
+
+function ns.showShitList()
+  hl.mode = "shit"
+  ns.showTab("Hit List")
 end
 
 -- Open the Hit List on someone's list (the Character page's link, /ppta hits).

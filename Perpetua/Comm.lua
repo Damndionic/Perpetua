@@ -1,6 +1,6 @@
 -- Guild sync: guildmates with the addon swap profiles over the hidden guild addon channel.
 --
---   H  <profile version> <recipes version> <addon version> <calendar> - <required version> <hit book digest>
+--   H  <profile version> <recipes version> <addon version> <calendar> - <required version> <hit book digest> <shit list>
 --                                                           "here's what I have" (login, change, every 10 min)
 --   Q  <name> <part> <version>                              "please send name's part" (anyone who's behind)
 --   D  <part> <version> <i> <n> <chunk>                     one piece of a part, sent to the whole guild
@@ -8,7 +8,8 @@
 --
 -- Parts: P = profile (gear, talents, stats, attunements, reps, raid sign-ups), R = recipes, B = the hit book
 -- (HitBook.lua: everyone's hit lists, passed along by anyone, versioned by its digest), C = the raid
--- calendar (Calendar.lua). Only officers send C, versioned by when the site made it. (F was the in-game forums
+-- calendar (Calendar.lua), S = the Shit List (ShitList.lua). Only officers send C and S, versioned by when the site
+-- made the calendar / when the list last changed. (F was the in-game forums
 -- snapshot, removed with the site's forums; the hello keeps its sixth field as "-" so older versions still parse
 -- it.) A version is a hash of the data, so an unchanged character sends nothing. When several people are behind
 -- on the same thing they share one broadcast: a request is skipped if someone else already asked or the data is already on its way.
@@ -223,7 +224,7 @@ function ns.announce()
   lastAnnounce = GetTime()
   if ns.hitbookOwn then ns.hitbookOwn() end
   enqueue(table.concat({ "H", me.pv or "-", me.rv or "-", ns.announcedVersion(), ns.calendarVersion and ns.calendarVersion() or "-",
-    "-", ns.REQUIRED, ns.hitbookDigest and ns.hitbookDigest() or "-" }, "\t"))
+    "-", ns.REQUIRED, ns.hitbookDigest and ns.hitbookDigest() or "-", ns.shitlistVersion and ns.shitlistVersion() or "-" }, "\t"))
 end
 
 -- A one-message update (loot, rolls) for the whole guild.
@@ -237,6 +238,7 @@ local function versionOf(part, me)
   if part == "R" then return me and me.rv end
   if part == "C" then return ns.calendarVersion() end
   if part == "B" then local d = ns.hitbookDigest(); return d ~= "-" and d or nil end
+  if part == "S" then return ns.shitlistVersion() end
 end
 
 local lastSent, sendPending = {}, {}
@@ -247,7 +249,7 @@ local function sendPart(part)
   if not me then return end
   local version = versionOf(part, me)
   if not version or sendPending[part] then return end
-  if part == "C" and not ns.isOfficer(ns.selfName) then return end -- nobody would accept it
+  if (part == "C" or part == "S") and not ns.isOfficer(ns.selfName) then return end -- nobody would accept it
   local last = lastSent[part]
   if last and last.v == version and GetTime() - last.at < 30 then return end -- just sent it; they'll have it
   sendPending[part] = true
@@ -278,6 +280,9 @@ local function sendPart(part)
     elseif part == "B" then
       payload = ns.hitbookPayload()
       if not payload then return end
+    elseif part == "S" then
+      payload = ns.shitlistPayload()
+      if not payload then return end
     else
       payload = { t = me.rt, r = me.recipes }
     end
@@ -304,7 +309,7 @@ local function request(name, part, version)
   C_Timer.After(1 + math.random() * 3, function()
     local rec = ns.players()[name]
     local have = part == "C" and ns.calendarVersion() or part == "B" and ns.hitbookDigest()
-      or rec and (part == "P" and rec.pv or rec.rv)
+      or part == "S" and ns.shitlistVersion() or rec and (part == "P" and rec.pv or rec.rv)
     if have == version or buffers[name .. part .. version] then return end
     if asked[key] and GetTime() - asked[key] < 60 then return end
     asked[key] = GetTime()
@@ -336,6 +341,9 @@ local function accept(from, part, version, s)
     return
   elseif part == "C" then
     if ns.isOfficer(from) then ns.adoptCalendar(data) end
+    return
+  elseif part == "S" then
+    if ns.isOfficer(from) then ns.adoptShitlist(data) end
     return
   elseif part == "R" then
     if type(data.r) ~= "table" then return end
@@ -447,6 +455,9 @@ local function onMessage(text, channel, sender)
     -- A newer raid calendar, from an officer.
     local calT = tonumber(f[5])
     if calT and calT > (tonumber(ns.calendarVersion()) or 0) and ns.isOfficer(from) then request(from, "C", f[5]) end
+    -- A newer Shit List, from an officer.
+    local shitT = tonumber(f[9])
+    if shitT and shitT > (tonumber(ns.shitlistVersion()) or 0) and ns.isOfficer(from) then request(from, "S", f[9]) end
     -- A hello only changes the window when it's someone new or their addon version changed.
     if newHere or wasAddon ~= rec.addon then ns.fire() end
   elseif kind == "L" or kind == "R" then
@@ -462,7 +473,7 @@ local function onMessage(text, channel, sender)
     -- Someone else asked for it and we already have this version: don't collect and unpack it all again.
     local rec = ns.players()[from]
     local have = part == "P" and rec and rec.pv or part == "R" and rec and rec.rv
-      or part == "C" and ns.calendarVersion() or part == "B" and ns.hitbookDigest() or nil
+      or part == "C" and ns.calendarVersion() or part == "B" and ns.hitbookDigest() or part == "S" and ns.shitlistVersion() or nil
     if have == version then return end
     local key = from .. part .. version
     local b = buffers[key]

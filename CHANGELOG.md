@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.22.0
+
+- **Shit List**: officers can mark enemy players. Right-click someone's portrait (or their name in chat, or in the group and raid lists) and choose **Add to the Shit List**, then give a reason. They show up for everyone in the guild who has the addon:
+  - **Tooltips**: mousing over them shows a big red SHIT LIST banner, the reason and who added them, and the tooltip border turns red.
+  - **Group finder**: any group with someone from the list in it is marked in red, and the group's tooltip names who it is and why.
+  - **Hit List page**: a new **Shit List** view lists everyone with their reasons. The list is on perpetua.gg/hit-list too.
+- The list is shared through guild sync, and only lists sent by an officer are accepted, so nobody else can add or remove names. Officers can also use `/ppta shitlist add First Surname - reason` and `/ppta shitlist remove First Surname`.
+
 ## 2.21.0
 
 - **Hit list sync fixed**: everyone now sees the same hit list. Hit lists are passed along between guildmates, so your kills reach the whole guild and perpetua.gg even if you've never been online at the same time as an officer. Before, each person's Hit List (and the site) showed different people and different counts depending on who they'd synced with.

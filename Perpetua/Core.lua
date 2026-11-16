@@ -106,6 +106,7 @@ local HELP = {
   { "attune", "attunements" },
   { "professions", "who can make what, by profession (or /ppta crafters)" },
   { "hits", "the hit list: open-world kills, deaths and duels, the guild's and yours" },
+  { "shitlist", "the Shit List (officers: shitlist add First Surname - why, shitlist remove First Surname)" },
   { "export", "your export for the site" },
   { "sync", "save for the Perpetua app (reloads your UI)" },
   { "minimap", "hide or show the minimap button" },
@@ -114,7 +115,8 @@ local HELP = {
   { "guild", "the guild roster" },
 }
 SlashCmdList.PERPETUA = function(msg)
-  msg = (msg or ""):lower():match("^%s*(.-)%s*$")
+  local raw = msg or ""
+  msg = raw:lower():match("^%s*(.-)%s*$")
   if ns.locked() and msg ~= "minimap" then ns.showTab("Welcome") return end
   if msg == "help" or msg == "?" then
     print("|cffd4af37Perpetua|r commands (/perpetua, /perp or /ppta):")
@@ -135,6 +137,7 @@ SlashCmdList.PERPETUA = function(msg)
     end
     if ns.lastDeath then print("  last death: " .. (ns.lastDeath.name and ns.safe(ns.lastDeath.name) or "no enemy player") .. " (" .. ns.lastDeath.why .. ")") end
     ns.showHitList(ns.selfName)
+  elseif msg:match("^shitlist") or msg:match("^shit list") then ns.shitlistCommand((raw:gsub("^%s*[Ss]hit [Ll]ist", "shitlist")))
   elseif msg == "export" then ns.showTab("Export"); ns.renderExport(true)
   elseif msg == "sync" then ns.saveAndReload() -- asks; the reload is a click on its button (the game blocks addons reloading)
   elseif msg == "attune" or msg == "attunements" then ns.showTab("Attunements")

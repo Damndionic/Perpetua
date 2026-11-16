@@ -30,6 +30,9 @@ Any guildmate's full profile: equipped gear with item icons, talents and spec, p
 **Hit list**
 Its own page for the guild's open-world PvP: a ledger of everyone's killing blows and deaths, anyone's hit list a click away (who they kill most, who kills them most, their nemesis and blood feuds), the guild's Most wanted (the enemies who keep killing us, and whether anyone's answered) and favourite targets. Duels are counted separately: wins, losses, who you beat and lose to most. Battlegrounds don't count. The same at perpetua.gg/hit-list.
 
+**Shit List**
+Officers mark enemy players from the right-click menu, with a reason. Everyone in the guild then sees them flagged in red: a banner in their tooltip and a red border, and a red mark on any group in the group finder they're in. The list is shared through guild sync (only officers' lists are accepted) and shows on the Hit List page and perpetua.gg.
+
 **Attunements**
 A guild-wide checklist for Onyxia, Molten Core, Blackwing Lair and Naxxramas. It also covers the dungeon keys: UBRS, Scholomance, Stratholme, Blackrock Depths and Dire Maul, plus Molten Core runes.
 
@@ -67,6 +70,7 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 | `/ppta` | Open or close the window |
 | `/ppta me` | Your character |
 | `/ppta hits` | The Hit List page, plus your totals in chat |
+| `/ppta shitlist` | The Shit List (officers: `add First Surname - reason`, `remove First Surname`) |
 | `/ppta attune` | Attunements |
 | `/ppta professions` | Who can make what (`/ppta crafters` works too) |
 | `/ppta loot` | Loot and roll history |
