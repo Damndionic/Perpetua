@@ -1,11 +1,13 @@
 -- Guild sync: guildmates with the addon swap profiles over the hidden guild addon channel.
 --
---   H  <profile version> <recipes version> <addon version>   "here's what I have" (login, change, every 10 min)
+--   H  <profile version> <recipes version> <addon version> <calendar> - <required version> <hit book digest>
+--                                                           "here's what I have" (login, change, every 10 min)
 --   Q  <name> <part> <version>                              "please send name's part" (anyone who's behind)
 --   D  <part> <version> <i> <n> <chunk>                     one piece of a part, sent to the whole guild
 --   L / R                                                   a loot drop / a /roll seen in a raid (Loot.lua)
 --
--- Parts: P = profile (gear, talents, stats, attunements, reps, raid sign-ups), R = recipes, C = the raid
+-- Parts: P = profile (gear, talents, stats, attunements, reps, raid sign-ups), R = recipes, B = the hit book
+-- (HitBook.lua: everyone's hit lists, passed along by anyone, versioned by its digest), C = the raid
 -- calendar (Calendar.lua). Only officers send C, versioned by when the site made it. (F was the in-game forums
 -- snapshot, removed with the site's forums; the hello keeps its sixth field as "-" so older versions still parse
 -- it.) A version is a hash of the data, so an unchanged character sends nothing. When several people are behind
@@ -103,6 +105,7 @@ function ns.refreshSelf(quiet)
   local link = PerpetuaDB.link
   profile.hits = ns.hitsForSend and ns.hitsForSend() or nil -- as of the last flush (hv), see PvP.lua
   profile.hv = ns.hitsVersion and ns.hitsVersion() or nil
+  if ns.hitbookOwn then ns.hitbookOwn() end
   if link and link.code and ns.now() - (link.t or 0) < 7 * 86400 then profile.link = link.code else PerpetuaDB.link = nil end
   local players = ns.players()
   local me = players[name] or {}
@@ -218,13 +221,22 @@ function ns.announce()
   -- Nothing saved for this character in this guild yet (the guild just changed): read it again, which announces.
   if not me then ns.scheduleRefresh(2) return end
   lastAnnounce = GetTime()
+  if ns.hitbookOwn then ns.hitbookOwn() end
   enqueue(table.concat({ "H", me.pv or "-", me.rv or "-", ns.announcedVersion(), ns.calendarVersion and ns.calendarVersion() or "-",
-    "-" }, "\t"))
+    "-", ns.REQUIRED, ns.hitbookDigest and ns.hitbookDigest() or "-" }, "\t"))
 end
 
 -- A one-message update (loot, rolls) for the whole guild.
 function ns.sendLine(fields)
   if IsInGuild() and not ns.locked() then enqueue(table.concat(fields, "\t")) end
+end
+
+-- The version of one of our parts, as the hello announces it.
+local function versionOf(part, me)
+  if part == "P" then return me and me.pv end
+  if part == "R" then return me and me.rv end
+  if part == "C" then return ns.calendarVersion() end
+  if part == "B" then local d = ns.hitbookDigest(); return d ~= "-" and d or nil end
 end
 
 local lastSent, sendPending = {}, {}
@@ -233,7 +245,7 @@ local packed = {} -- part -> { v = version, s = packed string }: re-sends reuse 
 local function sendPart(part)
   local me = ns.me()
   if not me then return end
-  local version = part == "P" and me.pv or part == "R" and me.rv or part == "C" and ns.calendarVersion() or nil
+  local version = versionOf(part, me)
   if not version or sendPending[part] then return end
   if part == "C" and not ns.isOfficer(ns.selfName) then return end -- nobody would accept it
   local last = lastSent[part]
@@ -245,7 +257,7 @@ local function sendPart(part)
     me = ns.me()
     if not me then return end
     -- Read the version now: the data may have changed during the wait.
-    version = part == "P" and me.pv or part == "R" and me.rv or part == "C" and ns.calendarVersion() or nil
+    version = versionOf(part, me)
     if not version then return end
     local cachedPack = packed[part]
     if cachedPack and cachedPack.v == version then
@@ -262,6 +274,9 @@ local function sendPart(part)
       payload.t = me.pt
     elseif part == "C" then
       payload = ns.calendar()
+      if not payload then return end
+    elseif part == "B" then
+      payload = ns.hitbookPayload()
       if not payload then return end
     else
       payload = { t = me.rt, r = me.recipes }
@@ -288,7 +303,8 @@ local function request(name, part, version)
   -- Random wait so one guildmate asks and the rest just listen for the broadcast.
   C_Timer.After(1 + math.random() * 3, function()
     local rec = ns.players()[name]
-    local have = part == "C" and ns.calendarVersion() or rec and (part == "P" and rec.pv or rec.rv)
+    local have = part == "C" and ns.calendarVersion() or part == "B" and ns.hitbookDigest()
+      or rec and (part == "P" and rec.pv or rec.rv)
     if have == version or buffers[name .. part .. version] then return end
     if asked[key] and GetTime() - asked[key] < 60 then return end
     asked[key] = GetTime()
@@ -314,6 +330,10 @@ local function accept(from, part, version, s)
     rec.profile, rec.pz, rec.pv, rec.pt = ns.summarize(data), s, version, tonumber(data.t)
     ns.profilesChanged = (ns.profilesChanged or 0) + 1 -- the Professions page lists crafters from profiles too
     rec.class, rec.level = c.classFile, tonumber(c.level)
+    if ns.hitbookFromProfile then ns.hitbookFromProfile(from, data) end
+  elseif part == "B" then
+    ns.hitbookMerge(data)
+    return
   elseif part == "C" then
     if ns.isOfficer(from) then ns.adoptCalendar(data) end
     return
@@ -330,6 +350,46 @@ local function accept(from, part, version, s)
   ns.session.received = ns.session.received + 1
   ns.fire()
 end
+
+-- Required version. Each release names the oldest version the guild may still run (ns.REQUIRED, raised when a
+-- release fixes something older versions get wrong, like 2.21's hit-list sync). Officers' hellos carry it; anyone
+-- below it gets a popup at every login and /reload until they update. Addons can't update themselves, so this is
+-- as forced as it gets. Only officers' word counts, so a guildmate can't nag the guild with a made-up version.
+ns.REQUIRED = "2.21.0"
+
+local requiredShown -- the version this session already showed the popup for
+local function showRequired()
+  local v = PerpetuaDB.required
+  if not (v and ns.newer(v, ns.VERSION)) then PerpetuaDB.required = nil return end
+  if requiredShown == v or not ns.T or not ns.T.dialog then return end
+  if InCombatLockdown() then C_Timer.After(10, showRequired) return end
+  requiredShown = v
+  print("|cffd4af37Perpetua|r: the guild needs version " .. ns.safe(v) .. " or newer (you have " .. ns.VERSION .. "). Update through CurseForge or " .. ns.SITE .. "/addon.")
+  ns.T.dialog({
+    title = "Update Perpetua",
+    text = "The guild now needs Perpetua " .. ns.safe(v) .. " or newer. You have " .. ns.VERSION .. ".\n\n"
+      .. "Older versions get the hit list and guild sync wrong. Update through the CurseForge app, or download it from "
+      .. ns.SITE .. "/addon, then restart the game.",
+    accept = "Get the link",
+    onAccept = function() ns.T.copyBox("Download Perpetua", "https://" .. ns.SITE .. "/addon") end,
+  })
+end
+
+function ns.noteRequired(v)
+  v = ns.text(v)
+  if not v or not v:match("^%d+%.%d+[%.%d]*$") or not ns.newer(v, ns.VERSION) then return end
+  if PerpetuaDB.required and not ns.newer(v, PerpetuaDB.required) then showRequired() return end
+  PerpetuaDB.required = v
+  showRequired()
+end
+
+local requiredFrame = CreateFrame("Frame")
+requiredFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+requiredFrame:SetScript("OnEvent", function(self)
+  self:UnregisterAllEvents()
+  C_Timer.After(8, function() pcall(showRequired) end)
+end)
+ns.showRequiredForTest = showRequired
 
 -- Update notice. A guildmate's hello carries their addon version; the newest one seen is kept (PerpetuaDB.newest)
 -- so the notice still shows after a relog, until this install catches up. It shows in the sidebar and the minimap
@@ -382,6 +442,8 @@ local function onMessage(text, channel, sender)
     end
     if f[2] and f[2] ~= "-" and f[2] ~= rec.pv then request(from, "P", f[2]) end
     if f[3] and f[3] ~= "-" and f[3] ~= rec.rv then request(from, "R", f[3]) end
+    if f[8] and f[8] ~= "-" and f[8] ~= ns.hitbookDigest() then request(from, "B", f[8]) end
+    if f[7] and ns.isOfficer(from) then ns.noteRequired(f[7]) end
     -- A newer raid calendar, from an officer.
     local calT = tonumber(f[5])
     if calT and calT > (tonumber(ns.calendarVersion()) or 0) and ns.isOfficer(from) then request(from, "C", f[5]) end
@@ -400,7 +462,7 @@ local function onMessage(text, channel, sender)
     -- Someone else asked for it and we already have this version: don't collect and unpack it all again.
     local rec = ns.players()[from]
     local have = part == "P" and rec and rec.pv or part == "R" and rec and rec.rv
-      or part == "C" and ns.calendarVersion() or nil
+      or part == "C" and ns.calendarVersion() or part == "B" and ns.hitbookDigest() or nil
     if have == version then return end
     local key = from .. part .. version
     local b = buffers[key]

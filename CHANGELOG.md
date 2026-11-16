@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.21.0
+
+- **Hit list sync fixed**: everyone now sees the same hit list. Hit lists are passed along between guildmates, so your kills reach the whole guild and perpetua.gg even if you've never been online at the same time as an officer. Before, each person's Hit List (and the site) showed different people and different counts depending on who they'd synced with.
+- Your hit list goes out as it stood at its last update (at most every 15 minutes), so every copy of it matches. You still see your own numbers update straight away.
+- **Required updates**: when the guild needs everyone on a newer version (like this one), you get a popup at login until you update.
+
 ## 2.20.0
 
 - **Hit List page**: the hit list has its own page in the sidebar, right under Guild. **The ledger** lists everyone in the guild with a record, with their killing blows, deaths and survival rate (the share of their fights that ended with the other player dead). Click anyone to see their hit list beside it: who they kill most, who kills them most, their **nemesis**, and any **blood feud** (an enemy you've both killed each other, as a score). **Most wanted** adds up the enemies who keep killing us, and shows whether anyone's paid them back yet; **Favourite targets** shows the enemies we've put down most. Same at perpetua.gg/hit-list.

@@ -492,7 +492,7 @@ local function renderCharacter()
       color("f0d8ff", "Arcane " .. (r.arcane or 0)), "small")
   end
   -- The hit list has its own page now (Hit List tab); here just the totals and the way there.
-  local hits = name == ns.selfName and ns.hitsForProfile and ns.hitsForProfile() or p.hits
+  local hits = name == ns.selfName and ns.hitsForProfile and ns.hitsForProfile() or (ns.hitsOf and ns.hitsOf(name)) or p.hits
   if type(hits) == "table" and (hits.w or hits.du) then
     C:Heading("Hit list")
     local parts = {}
@@ -567,19 +567,27 @@ local function buildHitList(page)
   hl.canvas = Canvas(area)
 end
 
--- Everyone with a record in this mode: { name, class, h }, you included even before your profile goes out.
+-- Everyone with a record in this mode: { name, class, h }, you included even before your profile goes out (your live
+-- numbers). Guildmates come from the hit book (HitBook.lua: passed along by everyone, so it covers people you've
+-- never been online with), else the profile they sent you.
 local function fighters(mode)
-  local out, seenSelf = {}, false
+  local out, done = {}, {}
   local function add(name, class, hits)
+    done[name] = true
     if type(hits) == "table" and type(hits[mode]) == "table" then out[#out + 1] = { name = name, class = class, h = hits[mode] } end
   end
-  for _, e in ipairs(everyone(false)) do
-    if e.name == ns.selfName then seenSelf = true; add(e.name, e.class, ns.hitsForProfile and ns.hitsForProfile())
-    else add(e.name, e.class, e.profile and e.profile.hits) end
-  end
-  if not seenSelf and ns.selfName then
+  if ns.selfName then
     local _, classFile = try(UnitClass, "player")
     add(ns.selfName, classFile, ns.hitsForProfile and ns.hitsForProfile())
+  end
+  for _, e in ipairs(everyone(false)) do
+    if not done[e.name] then
+      local h = ns.hitsOf and ns.hitsOf(e.name)
+      add(e.name, e.class, h or (e.profile and e.profile.hits))
+    end
+  end
+  for name, e in pairs(ns.hitbookEntries and ns.hitbookEntries() or {}) do
+    if not done[name] then add(name, e.c, e.h) end
   end
   table.sort(out, function(a, b)
     if (a.h.nk or 0) ~= (b.h.nk or 0) then return (a.h.nk or 0) > (b.h.nk or 0) end

@@ -54,6 +54,8 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 - **Light on traffic.** Each character sends a short hello when you log in and every 10 minutes. Full profiles are only sent when something has changed (buffs and food don't count) and someone asks for it, are held back during combat and in raid instances, and are throttled the same way ChatThrottleLib is.
 - **Light on memory.** Guildmates' full profiles are kept compressed and only unpacked when you open their page, and former members' are let go 30 days after they leave.
 - **Hit list updates** ride along with your profile at most every 15 minutes, never mid-battleground.
+- **Hit lists are passed along** by every guildmate, so the whole guild (and perpetua.gg) sees the same ledger, even for members who were never online together.
+- **Required updates**: when the guild needs a newer version, a popup at login says so until you update.
 - **Never shared:** gold, bags and bank contents, chat and whispers, or anything about your Battle.net account.
 
 ---
