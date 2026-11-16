@@ -154,6 +154,20 @@ function ns.promptShitlistAdd(prefill)
   local T = ns.T
   if not ns.canEditShitlist() then say("Only officers can change the Shit List.") return end
   local name = prefill or targetName()
+  if name then
+    -- From a portrait, a name in chat or your target: the name is known, so only ask why.
+    T.dialog({
+      title = "Add to the Shit List", accept = "Add",
+      text = "Why is " .. ns.safe(name) .. " going on the Shit List? The reason shows in tooltips, the group finder and the Hit List.",
+      input = { text = "", maxLetters = WHY_MAX },
+      okUsable = function(t) return t:match("%S") ~= nil end, okWhy = "Give a reason first.",
+      onAccept = function(why)
+        local ok, err = ns.shitlistAdd(name, why)
+        say(ok and (ns.safe(tidy(ns.playerKey(name))) .. " is on the Shit List.") or err)
+      end,
+    })
+    return
+  end
   T.dialog({
     title = "Add to the Shit List", accept = "Add",
     text = "Their name, then why. The reason shows in tooltips, the group finder and the Hit List.\nExample: Gankus Maximus - camps the Stormwind flight path",
