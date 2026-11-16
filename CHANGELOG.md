@@ -2,7 +2,7 @@
 
 ## 2.22.0
 
-- **Shit List**: officers can mark enemy players. Right-click someone's portrait (or their name in chat, or in the group and raid lists) and choose **Add to the Shit List**, then give a reason. They show up for everyone in the guild who has the addon:
+- **Shit List**: officers can mark enemy players. Right-click someone's portrait (or their name in chat, or in the group and raid lists) and choose **Add to the Shit List**; the name comes from them, so you only type the reason. They show up for everyone in the guild who has the addon:
   - **Tooltips**: mousing over them shows a big red SHIT LIST banner, the reason and who added them, and the tooltip border turns red.
   - **Group finder**: any group with someone from the list in it is marked in red, and the group's tooltip names who it is and why.
   - **Hit List page**: a new **Shit List** view lists everyone with their reasons. The list is on perpetua.gg/hit-list too.
