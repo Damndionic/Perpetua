@@ -1954,6 +1954,22 @@ local function build()
   end)
   hover:SetScript("OnLeave", function() GameTooltip:Hide() end)
   main.newRow = newRow
+  -- Dark mode switch (Theme.lua T.DARK), left of the guild window one. It saves at once; the look changes on reload.
+  local darkRow = CreateFrame("Frame", nil, top)
+  darkRow:SetSize(110, 22); darkRow:SetPoint("RIGHT", tag, "LEFT", -22, 0)
+  main.darkSwitch = T.switch(darkRow, function(on) ns.setDark(on) end)
+  main.darkSwitch:SetPoint("RIGHT")
+  main.darkSwitch:SetOn(T.dark())
+  local darkLabel = T.text(darkRow, "nav", "RIGHT"); darkLabel:SetPoint("RIGHT", main.darkSwitch, "LEFT", -9, 0)
+  darkLabel:SetText("DARK")
+  local darkHover = CreateFrame("Frame", nil, darkRow); darkHover:SetAllPoints(darkLabel)
+  darkHover:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:AddLine("Dark mode", T.C.gold[1], T.C.gold[2], T.C.gold[3])
+    GameTooltip:AddLine("A shadowier Perpetua window: charcoal instead of navy, brass instead of gold, softer class and item colours. Switching reloads your UI. Also in Options > AddOns > Perpetua and /ppta dark.", 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  darkHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
   -- Sidebar: the sections in groups, the sync card at the bottom.
   local side = CreateFrame("Frame", nil, main)
@@ -2100,6 +2116,7 @@ function ns.setDark(on)
     return
   end
   PerpetuaDB.dark = on or nil
+  if main and main.darkSwitch then main.darkSwitch:SetOn(on) end
   if InCombatLockdown() then
     print("|cffd4af37Perpetua|r: dark mode " .. (on and "on" or "off") .. ". It shows after your next /reload.")
     return
