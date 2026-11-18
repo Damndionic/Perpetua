@@ -21,24 +21,51 @@ local C = {
 }
 T.C = C
 
--- Dark mode (Options > AddOns > Perpetua, /ppta dark): the navy fields turn to warm charcoal, gold and text stay.
--- Only the background colours change. They are swapped inside the same tables at ADDON_LOADED, before any of our
--- frames exist, so everything built from C picks them up; switching takes a /reload.
+-- Dark mode (Options > AddOns > Perpetua, /ppta dark): a shadowier window, after BetterBlizzFrames' dark look. The
+-- navy fields turn to warm charcoal, the gold to a muted brass (borders, headings, buttons), the bright status and
+-- text colours step down, and class and item quality colours are drawn at CLASS_DIM (Data.lua). The colours are swapped inside the
+-- same tables at ADDON_LOADED, before any of our frames exist, so everything built from C picks them up; switching
+-- takes a /reload.
 T.DARK = {
   navy = { 0.067, 0.063, 0.071 }, midnight = { 0.043, 0.041, 0.047 }, royal = { 0.102, 0.098, 0.110 },
   royalLight = { 0.149, 0.141, 0.157 }, ink = { 0.020, 0.020, 0.024 },
+  gold = { 0.620, 0.510, 0.200 }, pale = { 0.780, 0.690, 0.470 }, warm = { 0.720, 0.620, 0.380 },
+  text = { 0.840, 0.810, 0.720 }, muted = { 0.560, 0.570, 0.620 }, dim = { 0.420, 0.430, 0.480 },
+  ok = { 0.450, 0.660, 0.440 }, raids = { 0.600, 0.270, 0.220 },
 }
+T.DARK_HEX = { danger = "c76a5e" } -- text-only colours with no C entry
+T.CLASS_DIM = 0.78
+-- "rrggbb" at k (default CLASS_DIM) of its brightness.
+function T.dimHex(hex, k)
+  k = k or T.CLASS_DIM
+  return string.format("%02x%02x%02x", math.floor(tonumber(hex:sub(1, 2), 16) * k + 0.5),
+    math.floor(tonumber(hex:sub(3, 4), 16) * k + 0.5), math.floor(tonumber(hex:sub(5, 6), 16) * k + 0.5))
+end
 function T.dark() return PerpetuaDB and PerpetuaDB.dark == true end
 function T.applyDark()
   if not T.dark() then return end
-  for k, v in pairs(T.DARK) do C[k][1], C[k][2], C[k][3] = v[1], v[2], v[3] end
+  for k, v in pairs(T.DARK) do
+    C[k][1], C[k][2], C[k][3] = v[1], v[2], v[3]
+    if T.HEX[k] then T.HEX[k] = string.format("%02x%02x%02x", math.floor(v[1] * 255 + 0.5), math.floor(v[2] * 255 + 0.5), math.floor(v[3] * 255 + 0.5)) end
+  end
+  for k, v in pairs(T.DARK_HEX) do T.HEX[k] = v end
+  -- Item quality and resistance colours step down like the class colours.
+  for q, hex in pairs(ns.QUALITY or {}) do ns.QUALITY[q] = T.dimHex(hex) end
+  for _, k in ipairs({ "fire", "nature", "frost", "shadow", "arcane" }) do T.HEX[k] = T.dimHex(T.HEX[k]) end
+  -- The fonts took their colour when Theme.lua loaded; give them the new one.
+  for _, f in pairs(T.fonts) do
+    local c = f.perpetuaColor
+    if c then f:SetTextColor(c[1], c[2], c[3]) end
+  end
 end
-T.HEX = { gold = "d4af37", pale = "f2d78c", warm = "e8c874", text = "efe6c8", muted = "a3acc9", ok = "8fd18a", danger = "ff8a7a", dim = "7f88a8", raids = "c0503f" }
+T.HEX = { gold = "d4af37", pale = "f2d78c", warm = "e8c874", text = "efe6c8", muted = "a3acc9", ok = "8fd18a", danger = "ff8a7a", dim = "7f88a8", raids = "c0503f",
+  fire = "ff7a45", nature = "7fd46a", frost = "6fc8ff", shadow = "b28cff", arcane = "f0d8ff" } -- resistances
 
 local function font(name, file, size, color, fallback)
   local f = CreateFont(name)
   if f:SetFont(MEDIA .. "Fonts\\" .. file, size, "") == false and fallback then f:CopyFontObject(fallback) end
   f:SetTextColor(color[1], color[2], color[3])
+  f.perpetuaColor = color -- a C entry: dark mode recolours from it (T.applyDark)
   f:SetShadowColor(0, 0, 0, 0.85)
   f:SetShadowOffset(1, -1)
   return f

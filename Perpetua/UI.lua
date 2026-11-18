@@ -487,9 +487,9 @@ local function renderCharacter()
     C:Heading("Stats")
     C:Line(string.format("Health %s    Mana %s    Armor %s", s.hp or "-", s.mp or "-", s.armor or "-"), "small")
     C:Line(string.format("Str %s   Agi %s   Sta %s   Int %s   Spi %s", s.str or "-", s.agi or "-", s.sta or "-", s["int"] or "-", s.spi or "-"), "small")
-    C:Line(color("ff7a45", "Fire " .. (r.fire or 0)) .. "   " .. color("7fd46a", "Nature " .. (r.nature or 0)) .. "   " ..
-      color("6fc8ff", "Frost " .. (r.frost or 0)) .. "   " .. color("b28cff", "Shadow " .. (r.shadow or 0)) .. "   " ..
-      color("f0d8ff", "Arcane " .. (r.arcane or 0)), "small")
+    C:Line(color(T.HEX.fire, "Fire " .. (r.fire or 0)) .. "   " .. color(T.HEX.nature, "Nature " .. (r.nature or 0)) .. "   " ..
+      color(T.HEX.frost, "Frost " .. (r.frost or 0)) .. "   " .. color(T.HEX.shadow, "Shadow " .. (r.shadow or 0)) .. "   " ..
+      color(T.HEX.arcane, "Arcane " .. (r.arcane or 0)), "small")
   end
   -- The hit list has its own page now (Hit List tab); here just the totals and the way there.
   local hits = name == ns.selfName and ns.hitsForProfile and ns.hitsForProfile() or (ns.hitsOf and ns.hitsOf(name)) or p.hits
@@ -684,7 +684,7 @@ local function renderHitList()
       C:Line(color(muted, i .. ".  ") .. enemyText(r), "small", nil, nil,
         color(gold, r.x) .. color(muted, "  ·  " .. r.lists .. (r.lists == 1 and " list" or " lists")))
       C:Line(answer and color(T.HEX.ok, "Answered: " .. answer.x .. (answer.lists > 1 and (" by " .. answer.lists .. " of us") or (" by " .. firstName(answer.first))))
-        or color("ff8a7a", "Unanswered"), "muted", nil, 22)
+        or color(T.HEX.danger, "Unanswered"), "muted", nil, 22)
     end
     C:Col(2)
     C:Heading("Favourite targets")
@@ -745,7 +745,7 @@ local function renderHitList()
     if r.n and mine[r.n] then
       local us, them = mine[r.n], r.x or 0
       C:Line(color(T.HEX.warm, duel and "Grudge" or "Blood feud") .. "   " .. color(ns.classColor(r.c), safe(r.n)), "small", nil, nil,
-        color(us >= them and T.HEX.ok or "ff8a7a", us .. " - " .. them))
+        color(us >= them and T.HEX.ok or T.HEX.danger, us .. " - " .. them))
       break
     end
   end
@@ -1628,7 +1628,7 @@ local function renderSetup()
   local pending = PerpetuaDB.link
 
   if mine then
-    setup.statusAccent:SetVertexColor(0.56, 0.82, 0.54)
+    setup.statusAccent:SetVertexColor(T.C.ok[1], T.C.ok[2], T.C.ok[3])
     setup.state:SetText(color(T.HEX.ok, "LINKED"))
     setup.detail:SetText(safe(ns.selfName) .. " is on " .. ns.SITE .. (others > 0 and (", along with " .. others .. " of your other characters.") or ".")
       .. "\n\nNew characters on this account are added by themselves. Enter a code again only if you want them under a different Discord account.")
@@ -1876,7 +1876,7 @@ local function setStats(list)
     end
     local item = list[i]
     st.l:SetText(item[2] or ""); st.n:SetText(tostring(item[1] or ""))
-    local c = item[3] == "ok" and { 0.561, 0.820, 0.541 } or T.C.pale
+    local c = item[3] == "ok" and T.C.ok or T.C.pale
     st.n:SetTextColor(c[1], c[2], c[3])
     st.l:ClearAllPoints(); st.n:ClearAllPoints()
     -- Every label on the same line: the first at a fixed spot, the rest left of the number before them, level
@@ -1983,7 +1983,7 @@ local function build()
   local cbg = T.fill(card, "BACKGROUND", T.C.midnight, 0.7); cbg:SetAllPoints()
   T.outline(card, 0, T.C.gold, 0.25)
   main.syncCard = card
-  main.syncDot = T.fill(card, "ARTWORK", { 0.561, 0.820, 0.541 }, 1); main.syncDot:SetSize(6, 6); main.syncDot:SetPoint("TOPLEFT", 12, -15)
+  main.syncDot = T.fill(card, "ARTWORK", T.C.ok, 1); main.syncDot:SetSize(6, 6); main.syncDot:SetPoint("TOPLEFT", 12, -15)
   main.sync = T.text(card, "small"); main.sync:SetPoint("LEFT", main.syncDot, "RIGHT", 7, 0); main.sync:SetPoint("RIGHT", -10, 0)
   main.update = T.text(card, "tagline"); main.update:SetPoint("TOPLEFT", 12, -28); main.update:SetPoint("RIGHT", -10, 0)
   local sync = T.button(card, "Save & reload", 140, function() ns.saveAndReload() end, "tab")
