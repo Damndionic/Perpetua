@@ -255,6 +255,10 @@ local function registerSettings()
     end
     Settings.CreateSlider(category, size, options, "How big the Perpetua window is. Ctrl + mouse wheel on the window does the same.")
   end
+  -- Dark mode (Theme.lua T.DARK; also /ppta dark). Takes a reload, so setting it asks for one.
+  local dark = Settings.RegisterProxySetting(category, "PERPETUA_DARK_MODE", Settings.VarType.Boolean,
+    "Dark mode", false, ns.T.dark, function(value) ns.setDark(value) end)
+  Settings.CreateCheckbox(category, dark, "Charcoal instead of royal navy behind the Perpetua window. Gold stays. Needs a UI reload.")
   Settings.RegisterAddOnCategory(category)
 end
 

@@ -2092,6 +2092,26 @@ function ns.setScale(value, quiet)
   if not quiet then print("|cffd4af37Perpetua|r: window size " .. math.floor(value * 100 + 0.5) .. "%.") end
 end
 
+-- Dark mode (Theme.lua T.DARK). The colours are fixed when frames are built, so it asks to reload.
+function ns.setDark(on)
+  on = on and true or false
+  if on == T.dark() then
+    print("|cffd4af37Perpetua|r: dark mode is already " .. (on and "on" or "off") .. ".")
+    return
+  end
+  PerpetuaDB.dark = on or nil
+  if InCombatLockdown() then
+    print("|cffd4af37Perpetua|r: dark mode " .. (on and "on" or "off") .. ". It shows after your next /reload.")
+    return
+  end
+  local slash = type(SLASH_RELOAD1) == "string" and SLASH_RELOAD1:match("^/%S+$") or "/reload"
+  T.dialog({
+    title = on and "Dark mode on" or "Dark mode off", accept = "Reload",
+    text = "Reload your UI to switch the Perpetua window to " .. (on and "dark mode" or "the royal navy look") .. ". Until then it stays as it is.",
+    command = function() return slash end,
+  })
+end
+
 -- WoW only writes saved variables on logout or a UI reload, so "saving" for the Perpetua app means reloading.
 -- Asked first (it closes everything for a few seconds), and not in combat.
 -- The game refuses ReloadUI from addon code ("Interface action failed because of an AddOn", seen in 2.16 testing),

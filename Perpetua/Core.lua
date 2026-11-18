@@ -73,6 +73,7 @@ events:SetScript("OnEvent", function(_, event, ...)
       PerpetuaCharDB = PerpetuaCharDB or {}
       -- Left over from Hide Olympus (removed in 2.17) and the in-game forums (never opened to members).
       PerpetuaDB.olympus, PerpetuaDB.forumRead = nil, nil
+      ns.T.applyDark()
     end
   elseif event == "PLAYER_LOGIN" then
     if not started then started = true; start() end
@@ -112,6 +113,7 @@ local HELP = {
   { "minimap", "hide or show the minimap button" },
   { "guildui [on|off]", "the new guild window: the guild key and button open Perpetua's" },
   { "scale [70-150]", "window size in percent (or Ctrl + mouse wheel on the window)" },
+  { "dark [on|off]", "dark mode: charcoal instead of navy (reloads your UI)" },
   { "guild", "the guild roster" },
 }
 SlashCmdList.PERPETUA = function(msg)
@@ -162,6 +164,8 @@ SlashCmdList.PERPETUA = function(msg)
   elseif msg:match("^scale") then
     local pct = tonumber(msg:match("^scale%s+(%d+)%%?$"))
     if pct then ns.setScale(pct / 100) else print("|cffd4af37Perpetua|r: window size is " .. math.floor(ns.T.scale() * 100 + 0.5) .. "%. /ppta scale 70 to 150 changes it (or Ctrl + mouse wheel on the window).") end
+  elseif msg == "dark" or msg == "dark on" or msg == "dark off" then
+    ns.setDark(msg == "dark on" or (msg == "dark" and not ns.T.dark()))
   elseif msg == "me" then ns.selected = ns.selfName; ns.showTab("Character")
   elseif msg == "guild" or msg == "roster" then ns.showTab("Guild")
   elseif msg == "guildui" or msg == "guildui on" or msg == "guildui off" then

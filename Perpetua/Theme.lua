@@ -20,6 +20,19 @@ local C = {
   raids = { 0.753, 0.314, 0.247 }, -- the site's section tint for raids and loot (docs/design.md §2)
 }
 T.C = C
+
+-- Dark mode (Options > AddOns > Perpetua, /ppta dark): the navy fields turn to warm charcoal, gold and text stay.
+-- Only the background colours change. They are swapped inside the same tables at ADDON_LOADED, before any of our
+-- frames exist, so everything built from C picks them up; switching takes a /reload.
+T.DARK = {
+  navy = { 0.067, 0.063, 0.071 }, midnight = { 0.043, 0.041, 0.047 }, royal = { 0.102, 0.098, 0.110 },
+  royalLight = { 0.149, 0.141, 0.157 }, ink = { 0.020, 0.020, 0.024 },
+}
+function T.dark() return PerpetuaDB and PerpetuaDB.dark == true end
+function T.applyDark()
+  if not T.dark() then return end
+  for k, v in pairs(T.DARK) do C[k][1], C[k][2], C[k][3] = v[1], v[2], v[3] end
+end
 T.HEX = { gold = "d4af37", pale = "f2d78c", warm = "e8c874", text = "efe6c8", muted = "a3acc9", ok = "8fd18a", danger = "ff8a7a", dim = "7f88a8", raids = "c0503f" }
 
 local function font(name, file, size, color, fallback)
