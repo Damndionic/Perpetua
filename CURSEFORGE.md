@@ -59,6 +59,7 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 - **Hit list updates** ride along with your profile at most every 15 minutes, never mid-battleground.
 - **Hit lists are passed along** by every guildmate, so the whole guild (and perpetua.gg) sees the same ledger, even for members who were never online together.
 - **Required updates**: when the guild needs a newer version, a popup at login says so until you update.
+- **Dark mode**: a shadowier charcoal-and-brass look for the window, from the DARK switch at the top.
 - **Never shared:** gold, bags and bank contents, chat and whispers, or anything about your Battle.net account.
 
 ---
@@ -84,6 +85,7 @@ With two or more recipes tracked, the objective tracker gets one more block addi
 | `/ppta sync` | Save for the Perpetua app (reloads your UI) |
 | `/ppta minimap` | Hide or show the minimap button |
 | `/ppta scale 90` | Window size in percent, 70 to 150 (Ctrl + mouse wheel on the window, or Options > AddOns > Perpetua) |
+| `/ppta dark` | Dark mode on or off (`on` / `off`; also the DARK switch at the top of the window). Reloads your UI |
 | `/ppta help` | List all commands |
 
 `/perpetua` and `/perp` work too.

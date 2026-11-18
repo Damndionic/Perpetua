@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.23.0
+
+- **Dark mode**: a shadowier look for the Perpetua window. The navy background turns charcoal, the gold borders, headings and buttons turn a muted brass, and class colours, item colours and the rest of the text are toned down. Turn it on with the new **DARK** switch at the top of the window, in Options > AddOns > Perpetua, or with `/ppta dark`. Switching reloads your UI.
+
 ## 2.22.1
 
 - **Shit List**: officers can mark enemy players. Right-click someone's portrait (or their name in chat, or in the group and raid lists) and choose **Add to the Shit List**; the name comes from them, so you only type the reason. They show up for everyone in the guild who has the addon:
