@@ -1,14 +1,22 @@
--- The Shit List: enemy players the guild has marked. Officers add and remove names in game (Hit List tab, or
--- /ppta shitlist add First Surname - why); the list goes round the guild as part "S" of guild sync, and anyone on
--- it is flagged in their unit tooltip (a red banner and a red border) and in the group finder (a red row, and a
--- warning under the group's tooltip naming who in that group is on the list).
+-- The Shit List: enemy players the guild has marked. Anyone in the guild can add a name (Hit List tab, right-click,
+-- or /ppta shitlist add First Surname - why); the list goes round the guild in guild sync, and anyone on it is
+-- flagged in their unit tooltip (a red banner and a red border) and in the group finder (a red row, and a warning
+-- under the group's tooltip naming who in that group is on the list).
 --
--- The list travels whole, stamped with when it last changed (t), so a removal travels as well as an addition.
--- Like the raid calendar it's only accepted from an officer (by guild rank), so nobody can put names on it or
--- wipe it. Two officers editing at once: the later edit wins.
+-- Two layers, so a guildmate can add names but can't wipe the list:
+--   * The official list (part "S"): travels whole, stamped with when it last changed (t), and is only accepted
+--     from an officer (by guild rank). It also carries `removed` (key -> when): names an officer took off.
+--     Two officers editing at once: the later edit wins.
+--   * Each member's own adds (part "M", 2.24): only ever sent by that member, like a profile, so nobody can add
+--     or retract names under someone else's. Everyone who hears them shows them straight away.
+-- An officer's addon folds the members' adds it hears into the official list (marked m = 1), so they reach
+-- guildmates who were offline when the member was on, and the site. A member can take off only names they added
+-- (their next list leaves it out, which hides the folded copy too); an officer can take off anyone, and that
+-- sticks: a member can't put a name an officer removed back on (an officer can).
 local _, ns = ...
 
 local MAX = 500        -- entries
+local MEMBER_MAX = 50  -- names one member may have on it
 local FUTURE = 600     -- seconds a stamp may be ahead of our clock
 local NAME_MAX, WHY_MAX = 48, 120
 
@@ -18,7 +26,10 @@ local function store()
   ns.players(guild) -- makes the guild's table
   local g = PerpetuaDB.guilds[guild]
   if type(g.shitlist) ~= "table" or type(g.shitlist.list) ~= "table" then g.shitlist = { t = 0, list = {} } end
-  return g.shitlist
+  local s = g.shitlist
+  if type(s.removed) ~= "table" then s.removed = {} end
+  if type(s.members) ~= "table" then s.members = {} end
+  return s
 end
 
 -- The key for a name in any form the game gives it ("First Surname", "First-Surname", any case).
@@ -35,21 +46,59 @@ local function tidy(name)
   return (name:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " "):gsub("(%a)([%w']*)", function(a, b) return a:upper() .. b end))
 end
 
+local function count(t)
+  local n = 0
+  for _ in pairs(t) do n = n + 1 end
+  return n
+end
+
+-- A folded member add whose member has since sent a newer list without it: they took it off.
+local function retracted(s, k, e)
+  if not (e.m and e.by) then return false end
+  local ml = s.members[e.by]
+  return type(ml) == "table" and (ml.t or 0) > (e.at or 0) and type(ml.list) == "table" and not ml.list[k]
+end
+
+-- What everyone sees: the official list plus the members' adds. Rebuilt when anything changes.
+local view, viewOf
+local function dirty() view = nil end
+local function merged()
+  local s = store()
+  if not s then return {} end
+  if view and viewOf == s then return view end
+  local v = {}
+  for k, e in pairs(s.list) do if not retracted(s, k, e) then v[k] = e end end
+  for author, ml in pairs(s.members) do
+    for k, e in pairs(type(ml) == "table" and type(ml.list) == "table" and ml.list or {}) do
+      if not v[k] and not s.list[k] and not s.removed[k] then v[k] = { n = e.n, r = e.r, by = author, at = e.at, m = 1 } end
+    end
+  end
+  view, viewOf = v, s
+  return v
+end
+
 function ns.shitlistVersion()
   local s = store()
   return s and (s.t or 0) > 0 and tostring(s.t) or nil
 end
 
--- The entry for a player ({ n, r = why, by, at }), or nil.
+-- The version of one member's own adds (ours when name is nil), as their hello announces it.
+function ns.shitlistMemberVersion(name)
+  local s = store()
+  local ml = s and s.members[name or ns.selfName or ""]
+  return type(ml) == "table" and (ml.t or 0) > 0 and tostring(ml.t) or nil
+end
+
+-- The entry for a player ({ n, r = why, by, at, m = added by a member }), or nil.
 function ns.shitlistEntry(name)
-  local s, k = store(), keyOf(name)
-  return s and k and s.list[k] or nil
+  local k = keyOf(name)
+  return k and merged()[k] or nil
 end
 
 -- Everyone on it, newest first.
 function ns.shitlistEntries()
-  local out, s = {}, store()
-  for _, e in pairs(s and s.list or {}) do out[#out + 1] = e end
+  local out = {}
+  for _, e in pairs(merged()) do out[#out + 1] = e end
   table.sort(out, function(a, b)
     if (a.at or 0) ~= (b.at or 0) then return (a.at or 0) > (b.at or 0) end
     return (a.n or "") < (b.n or "")
@@ -57,71 +106,181 @@ function ns.shitlistEntries()
   return out
 end
 
+-- Officers: change the official list, take anyone off.
 function ns.canEditShitlist()
   return ns.selfName ~= nil and ns.isOfficer(ns.selfName)
 end
 
+-- Officers take anyone off; a member only the names they added.
+function ns.canRemoveShitlist(e)
+  return type(e) == "table" and (ns.canEditShitlist() or (e.m ~= nil and e.by == ns.selfName))
+end
+
 local function changed()
+  dirty()
   if ns.refreshGroupFinder then ns.refreshGroupFinder() end
   ns.fire()
   ns.announce()
 end
 
--- Officers only. Returns true, or nil and why not.
+local function mine(s)
+  local ml = s.members[ns.selfName]
+  if type(ml) ~= "table" or type(ml.list) ~= "table" then ml = { t = 0, list = {} }; s.members[ns.selfName] = ml end
+  return ml
+end
+
+local function bump(x) x.t = math.max(ns.now(), (x.t or 0) + 1) end
+
+-- Officers' addons: fold what members added (and took back off) into the official list, so it reaches everyone.
+function ns.shitlistFold()
+  local s = store()
+  if not s or not ns.canEditShitlist() then return false end
+  local any, n = false, count(s.list)
+  for author, ml in pairs(s.members) do
+    for k, e in pairs(type(ml) == "table" and type(ml.list) == "table" and ml.list or {}) do
+      if not s.list[k] and not s.removed[k] and n < MAX then
+        s.list[k] = { n = e.n, r = e.r, by = author, at = e.at, m = 1 }
+        n, any = n + 1, true
+      end
+    end
+  end
+  for k, e in pairs(s.list) do
+    if retracted(s, k, e) then s.list[k] = nil; any = true end
+  end
+  if any then bump(s); changed() end
+  return any
+end
+
+-- Our own adds an officer has since taken off: drop them, so our list doesn't keep sending them.
+local function dropRemoved(s)
+  local ml = s.members[ns.selfName or ""]
+  if type(ml) ~= "table" or type(ml.list) ~= "table" then return end
+  local any = false
+  for k in pairs(ml.list) do if s.removed[k] then ml.list[k] = nil; any = true end end
+  if any then bump(ml); changed() end
+end
+
+-- Anyone in the guild. Returns true, or nil and why not.
 function ns.shitlistAdd(name, why)
-  if not ns.canEditShitlist() then return nil, "Only officers can change the Shit List." end
   local s, k = store(), keyOf(name)
   if not s then return nil, "Not in a guild yet." end
+  if not ns.selfName then return nil, "Not ready yet." end
   if not k or #k > NAME_MAX then return nil, "Give a character name." end
-  if ns.selfName and k == ns.selfName:lower() then return nil, "That's you." end
-  local count = 0
-  for _ in pairs(s.list) do count = count + 1 end
-  if not s.list[k] and count >= MAX then return nil, "The list is full (" .. MAX .. ")." end
+  if k == ns.selfName:lower() then return nil, "That's you." end
   why = why and why:gsub("^%s+", ""):gsub("%s+$", "") or ""
-  s.list[k] = { n = tidy(ns.playerKey(name)), r = why ~= "" and why:sub(1, WHY_MAX) or nil, by = ns.selfName, at = ns.now() }
-  s.t = math.max(ns.now(), (s.t or 0) + 1)
+  local e = { n = tidy(ns.playerKey(name)), r = why ~= "" and why:sub(1, WHY_MAX) or nil, at = ns.now() }
+  if ns.canEditShitlist() then
+    if not s.list[k] and count(s.list) >= MAX then return nil, "The list is full (" .. MAX .. ")." end
+    e.by = ns.selfName
+    s.list[k], s.removed[k] = e, nil
+    bump(s)
+  else
+    if s.removed[k] then return nil, "An officer took " .. ns.safe(e.n) .. " off the Shit List. Ask an officer to put them back on." end
+    if merged()[k] then return nil, ns.safe(e.n) .. " is already on the Shit List." end
+    local ml = mine(s)
+    if count(ml.list) >= MEMBER_MAX then return nil, "You have " .. MEMBER_MAX .. " names on the list already. Take one off first." end
+    if count(merged()) >= MAX then return nil, "The list is full (" .. MAX .. ")." end
+    ml.list[k] = e
+    bump(ml)
+  end
   changed()
   return true
 end
 
+local REMOVED_MAX = 500
 function ns.shitlistRemove(name)
-  if not ns.canEditShitlist() then return nil, "Only officers can change the Shit List." end
   local s, k = store(), keyOf(name)
-  if not (s and k and s.list[k]) then return nil, "They're not on the list." end
-  s.list[k] = nil
-  s.t = math.max(ns.now(), (s.t or 0) + 1)
+  local e = s and k and merged()[k]
+  if not e then return nil, "They're not on the list." end
+  if ns.canEditShitlist() then
+    s.list[k] = nil
+    s.removed[k] = ns.now()
+    if count(s.removed) > REMOVED_MAX then
+      local oldK, oldAt
+      for rk, at in pairs(s.removed) do if not oldAt or at < oldAt then oldK, oldAt = rk, at end end
+      s.removed[oldK] = nil
+    end
+    bump(s)
+  elseif e.m and e.by == ns.selfName then
+    local ml = mine(s)
+    ml.list[k] = nil
+    bump(ml)
+  else
+    return nil, "Only officers can take off a name someone else added."
+  end
   changed()
   return true
 end
 
--- What guild sync sends.
+-- What guild sync sends: the official list (officers) and our own adds.
 function ns.shitlistPayload()
   local s = store()
   if not s or (s.t or 0) == 0 then return nil end
-  return { t = s.t, list = s.list }
+  return { t = s.t, list = s.list, removed = s.removed }
 end
 
--- A list from guild sync (already checked to come from an officer). Every field is checked: it's shown on screen.
+function ns.shitlistMemberPayload()
+  local s = store()
+  local ml = s and s.members[ns.selfName or ""]
+  if type(ml) ~= "table" or (ml.t or 0) == 0 then return nil end
+  return { t = ml.t, list = ml.list }
+end
+
+-- Every received field is checked: it's shown on screen.
+local function cleanEntry(e, withBy)
+  local k = type(e) == "table" and type(e.n) == "string" and #e.n <= NAME_MAX and keyOf(e.n)
+  if not k then return nil end
+  return k, {
+    n = e.n,
+    r = type(e.r) == "string" and e.r:sub(1, WHY_MAX) or nil,
+    by = withBy and type(e.by) == "string" and e.by:sub(1, NAME_MAX) or nil,
+    at = ns.num(e.at),
+    m = withBy and e.m and 1 or nil,
+  }
+end
+
+-- A list from guild sync (already checked to come from an officer).
 function ns.adoptShitlist(data)
   local s = store()
   if not s or type(data) ~= "table" or type(data.list) ~= "table" then return false end
   local t = ns.num(data.t)
   if not t or t <= (s.t or 0) or t > ns.now() + FUTURE then return false end
-  local list, count = {}, 0
+  local list, n = {}, 0
   for _, e in pairs(data.list) do
-    if count >= MAX then break end
-    local k = type(e) == "table" and type(e.n) == "string" and #e.n <= NAME_MAX and keyOf(e.n)
-    if k then
-      list[k] = {
-        n = e.n,
-        r = type(e.r) == "string" and e.r:sub(1, WHY_MAX) or nil,
-        by = type(e.by) == "string" and e.by:sub(1, NAME_MAX) or nil,
-        at = ns.num(e.at),
-      }
-      count = count + 1
-    end
+    if n >= MAX then break end
+    local k, c = cleanEntry(e, true)
+    if k then list[k] = c; n = n + 1 end
   end
-  s.t, s.list = t, list
+  local removed, r = {}, 0
+  for k, at in pairs(type(data.removed) == "table" and data.removed or {}) do
+    if r >= REMOVED_MAX then break end
+    if type(k) == "string" and #k <= NAME_MAX and ns.num(at) then removed[k] = ns.num(at); r = r + 1 end
+  end
+  s.t, s.list, s.removed = t, list, removed
+  dirty()
+  dropRemoved(s)
+  ns.shitlistFold()
+  if ns.refreshGroupFinder then ns.refreshGroupFinder() end
+  ns.fire()
+  return true
+end
+
+-- A member's own adds, from that member (guild sync checks the sender). Newer than what we have, or ignored.
+function ns.adoptShitlistMember(from, data)
+  local s = store()
+  if not s or type(from) ~= "string" or type(data) ~= "table" or type(data.list) ~= "table" then return false end
+  local t = ns.num(data.t)
+  local cur = s.members[from]
+  if not t or t <= (type(cur) == "table" and cur.t or 0) or t > ns.now() + FUTURE then return false end
+  local list, n = {}, 0
+  for _, e in pairs(data.list) do
+    if n >= MEMBER_MAX then break end
+    local k, c = cleanEntry(e, false)
+    if k then list[k] = c; n = n + 1 end
+  end
+  s.members[from] = { t = t, list = list }
+  dirty()
+  ns.shitlistFold()
   if ns.refreshGroupFinder then ns.refreshGroupFinder() end
   ns.fire()
   return true
@@ -152,7 +311,6 @@ local function say(msg) print("|cffd4af37Perpetua|r " .. msg) end
 
 function ns.promptShitlistAdd(prefill)
   local T = ns.T
-  if not ns.canEditShitlist() then say("Only officers can change the Shit List.") return end
   local name = prefill or targetName()
   if name then
     -- From a portrait, a name in chat or your target: the name is known, so only ask why.
@@ -359,7 +517,8 @@ end
 
 -- ---------- right-click menus (portraits, chat names, the guild and raid lists) ----------
 -- Menu.ModifyMenu adds to Blizzard's tagged menus without tainting them. Officers get "Add to the Shit List" (a
--- dialog asks why) or "Take off the Shit List"; everyone sees a red line with the reason when the player is on it.
+-- dialog asks why); officers, and whoever added them, get "Take off the Shit List"; everyone sees a red line with the
+-- reason when the player is on it.
 
 local MENUS = { "PLAYER", "ENEMY_PLAYER", "TARGET", "FOCUS", "PARTY", "RAID_PLAYER", "FRIEND", "CHAT_ROSTER",
   "GUILD", "COMMUNITIES_GUILD_MEMBER", "COMMUNITIES_WOW_MEMBER", "WORLD_STATE_SCORE", "PVP_SCOREBOARD", "RECENT_ALLY" }
@@ -378,18 +537,15 @@ local function addToMenu(_, root, ctx)
   local name = menuName(ctx)
   if not name or (ns.selfName and keyOf(name) == ns.selfName:lower()) then return end
   local e = ns.shitlistEntry(name)
-  if not e and not ns.canEditShitlist() then return end
   root:CreateDivider()
   root:CreateTitle("|cffd4af37Perpetua|r")
   if e then
     root:CreateTitle("|cffff2020On the Shit List|r" .. (e.r and ("|cffffb0a8: " .. ns.safe(e.r) .. "|r") or ""))
   end
-  if ns.canEditShitlist() then
-    if e then
-      root:CreateButton("Take off the Shit List", function() ns.promptShitlistRemove(e) end)
-    else
-      root:CreateButton("|cffff4040Add to the Shit List|r", function() ns.promptShitlistAdd(name) end)
-    end
+  if not e then
+    root:CreateButton("|cffff4040Add to the Shit List|r", function() ns.promptShitlistAdd(name) end)
+  elseif ns.canRemoveShitlist(e) then
+    root:CreateButton("Take off the Shit List", function() ns.promptShitlistRemove(e) end)
   end
 end
 

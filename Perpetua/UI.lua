@@ -622,7 +622,7 @@ end
 local function firstName(n) return safe((n or ""):match("^(%S+)") or n or "") end
 local function enemyText(r) return color(ns.classColor(r.c), safe(r.n or "?")) .. (r.l and r.l > 0 and color(T.HEX.muted, "  " .. r.l) or "") end
 
--- The Shit List view (ShitList.lua): everyone the officers have marked, with why.
+-- The Shit List view (ShitList.lua): everyone the guild has marked, with why.
 local function renderShitList(C)
   local muted, red = T.HEX.muted, "ff4040"
   local list = ns.shitlistEntries()
@@ -632,26 +632,27 @@ local function renderShitList(C)
   C:Col(1)
   C:Heading("The Shit List")
   C:Line(color(muted, "Players we don't group with: terrible attitudes, ninja looters, scammers, griefers, and anyone who's just bad to play with. Don't invite them, don't join their groups, don't trade with them."), "muted")
-  C:Line(color(muted, "Marked by the officers. They show in red in tooltips and the group finder."), "muted")
+  C:Line(color(muted, "Anyone in the guild can add a name. They show in red in tooltips and the group finder."), "muted")
   if #list == 0 then C:Line(color(muted, "Nobody yet."), "small") end
+  local anyMine = false
   for _, e in ipairs(list) do
     local l = C:Line(color(red, safe(e.n)), "small", nil, nil,
       color(muted, (e.by and (firstName(e.by) .. "  ·  ") or "") .. (e.at and ns.ago(e.at) or "")))
-    if officer then l.onClick = function() ns.promptShitlistRemove(e) end end
+    if ns.canRemoveShitlist(e) then l.onClick = function() ns.promptShitlistRemove(e) end; anyMine = true end
     C:Line(e.r and color("ffb0a8", safe(e.r)) or color(muted, "No reason given."), "muted", nil, 22)
   end
-  if officer and #list > 0 then C:Line(color(muted, "Click a name to take them off."), "muted") end
-  C:Col(2)
-  C:Heading(officer and "Add someone" or "How it works")
-  if officer then
-    C:Action("Add to the Shit List", function() ns.promptShitlistAdd() end)
-    C:Gap(4)
-    C:Line(color(muted, "Or right-click their portrait or name in chat: \"Add to the Shit List\". Your target fills in the name."), "muted")
-    C:Line(color(muted, "/ppta shitlist add First Surname - why"), "muted")
-  else
-    C:Line(color(muted, "Officers keep this list. Right-click someone and tell an officer if they belong on it."), "muted")
+  if anyMine then
+    C:Line(color(muted, officer and "Click a name to take them off." or "Click a name you added to take them off."), "muted")
   end
+  C:Col(2)
+  C:Heading("Add someone")
+  C:Action("Add to the Shit List", function() ns.promptShitlistAdd() end)
+  C:Gap(4)
+  C:Line(color(muted, "Or right-click their portrait or name in chat: \"Add to the Shit List\". Your target fills in the name."), "muted")
+  C:Line(color(muted, "/ppta shitlist add First Surname - why"), "muted")
   C:Gap(6)
+  C:Line(color(muted, officer and "You can take anyone off. A name you take off stays off: only an officer can put it back."
+    or "You can take off names you added. Officers can take off anyone, and a name they take off stays off."), "muted")
   C:Line(color(muted, "The list goes to everyone in the guild with the addon, and to the site."), "muted")
 end
 

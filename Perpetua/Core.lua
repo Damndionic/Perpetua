@@ -107,7 +107,7 @@ local HELP = {
   { "attune", "attunements" },
   { "professions", "who can make what, by profession (or /ppta crafters)" },
   { "hits", "the hit list: open-world kills, deaths and duels, the guild's and yours" },
-  { "shitlist", "the Shit List (officers: shitlist add First Surname - why, shitlist remove First Surname)" },
+  { "shitlist", "the Shit List (shitlist add First Surname - why, shitlist remove First Surname)" },
   { "export", "your export for the site" },
   { "sync", "save for the Perpetua app (reloads your UI)" },
   { "minimap", "hide or show the minimap button" },
