@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.25.0
+
+- **Class bar on the guild roster**: a coloured bar at the top of the Guild page shows how many of each class the guild has, like the roster on perpetua.gg. Each person counts once (tick **Alts separately** to count every character). Hover a class to see how many are online, and click it to show only that class in the list; click it again to show everyone.
+
 ## 2.24.0
 
 - **Shit List: everyone can add**: anyone in the guild can now put a player on the Shit List, not just officers. Right-click their portrait or name and choose **Add to the Shit List**, use the button on the Shit List page, or type `/ppta shitlist add First Surname - reason`. It shows for the whole guild straight away, with your name as who added it.

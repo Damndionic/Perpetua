@@ -13,7 +13,7 @@ Type **/ppta** (or **/perpetua**) or click the crest on your minimap.
 ## What you get
 
 **Guild**
-Everyone in the guild, with or without the addon: level, rank, spec, item level, professions, note and when they were last online. Hover a name for their zone, notes, raid attunements and alts; search, show or hide offline members, see alts separately, and sort any column.
+Everyone in the guild, with or without the addon, under a bar showing how many of each class you have (click a class to show only them): level, rank, spec, item level, professions, note and when they were last online. Hover a name for their zone, notes, raid attunements and alts; search, show or hide offline members, see alts separately, and sort any column.
 
 **Guild window** *(optional: the switch at the top of the window, or `/ppta guildui`)*
 Makes the guild key (J) and the guild button open Perpetua instead of Blizzard's guild window (hold Shift for Blizzard's). Click a member for their panel: whisper, invite, promote and demote one rank at a time, view their profile, make leader, remove. Notes, the message of the day and guild info open Blizzard's guild window, and **Guild Control** opens Blizzard's rank and permission settings: the game only lets its own UI change those, so the addon hands you straight to it. Guild actions work out of combat.
