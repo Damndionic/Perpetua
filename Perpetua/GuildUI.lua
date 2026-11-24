@@ -382,11 +382,104 @@ end
 -- about them (spec, item level, professions, raid attunements, alts).
 
 -- Builds the Guild page: controls along the top, the list, and the member panel.
+-- ---------- Class mix (the site's /roster class bar) ----------
+-- A bar of every class in the guild, wide by head count, and a legend under it that filters the list to one class.
+-- Counts people (one per account, the character the list shows for them), or every character with "Alts
+-- separately"; the online and search filters don't change them.
+local CLASSES = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
+local function className(cf)
+  local n = LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[cf]
+  return n or (cf:sub(1, 1) .. cf:sub(2):lower())
+end
+
+local function buildMix(page)
+  local mix = CreateFrame("Frame", nil, page)
+  mix:SetHeight(32)
+  local stack = CreateFrame("Frame", nil, mix)
+  stack:SetPoint("TOPLEFT", 2, 0); stack:SetPoint("TOPRIGHT", -2, 0); stack:SetHeight(8)
+  mix.stack, mix.segs, mix.keys = stack, {}, {}
+  for i, cf in ipairs(CLASSES) do
+    local seg = stack:CreateTexture(nil, "ARTWORK")
+    seg:SetTexture("Interface\\Buttons\\WHITE8X8")
+    mix.segs[i] = seg
+    local key = CreateFrame("Button", nil, mix)
+    key:SetHeight(20)
+    key.dot = key:CreateTexture(nil, "ARTWORK")
+    key.dot:SetTexture("Interface\\Buttons\\WHITE8X8"); key.dot:SetSize(7, 7); key.dot:SetPoint("LEFT", 0, 0)
+    key.name = T.text(key, "small"); key.name:SetPoint("LEFT", key.dot, "RIGHT", 5, 0)
+    key.count = T.text(key, "badgeValue"); key.count:SetPoint("LEFT", key.name, "RIGHT", 5, 0)
+    key.line = T.fill(key, "ARTWORK", T.C.pale, 0.9); key.line:SetHeight(1)
+    key.line:SetPoint("BOTTOMLEFT", key.name, "BOTTOMLEFT", 0, -2); key.line:SetPoint("BOTTOMRIGHT", key.count, "BOTTOMRIGHT", 0, -2)
+    key:SetScript("OnClick", function(self)
+      R.cls = (R.cls ~= self.cf) and self.cf or nil
+      ns.refreshUI(true)
+    end)
+    key:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+      GameTooltip:AddLine(T.classIcon(self.cf) .. color(ns.classColor(self.cf), className(self.cf)))
+      GameTooltip:AddLine(self.n .. " in the guild, " .. self.on .. " online", 1, 1, 1)
+      GameTooltip:AddLine(R.cls == self.cf and "Click to show every class." or "Click to show only " .. className(self.cf) .. "s.", 0.64, 0.67, 0.79)
+      GameTooltip:Show()
+    end)
+    key:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    mix.keys[i] = key
+  end
+  return mix
+end
+
+-- counts: { [classFile] = { n, online } } from what the list shows.
+local function renderMix(mix, counts)
+  local order, total = {}, 0
+  for _, cf in ipairs(CLASSES) do
+    local c = counts[cf] or { 0, 0 }
+    order[#order + 1] = { cf = cf, n = c[1], on = c[2] }
+    total = total + c[1]
+  end
+  table.sort(order, function(a, b) if a.n ~= b.n then return a.n > b.n end return className(a.cf) < className(b.cf) end)
+  -- The bar: each class as wide as its share, 2px between them.
+  local width = mix.stack:GetWidth()
+  if not width or width < 10 then width = 770 end
+  local used = 0
+  for _, o in ipairs(order) do if o.n > 0 then used = used + 1 end end
+  local room, x = width - 2 * math.max(used - 1, 0), 0
+  for i, o in ipairs(order) do
+    local seg = mix.segs[i]
+    if o.n > 0 and total > 0 then
+      local w = math.max(3, room * o.n / total)
+      local rgb = ns.classRGB(o.cf)
+      seg:SetVertexColor(rgb[1], rgb[2], rgb[3], (R.cls and R.cls ~= o.cf) and 0.35 or 1)
+      seg:ClearAllPoints(); seg:SetPoint("TOPLEFT", x, 0); seg:SetSize(w, 8); seg:Show()
+      x = x + w + 2
+    else
+      seg:Hide()
+    end
+  end
+  -- The legend, in the same order, one row.
+  local lx = 2
+  for i, o in ipairs(order) do
+    local key = mix.keys[i]
+    key.cf, key.n, key.on = o.cf, o.n, o.on
+    local rgb = ns.classRGB(o.cf)
+    key.dot:SetVertexColor(rgb[1], rgb[2], rgb[3])
+    key.name:SetText(color(ns.classColor(o.cf), className(o.cf)))
+    key.count:SetText(o.n)
+    key.line:SetShown(R.cls == o.cf)
+    key:SetAlpha(o.n > 0 and 1 or 0.4)
+    key:SetWidth(12 + key.name:GetStringWidth() + 5 + key.count:GetStringWidth())
+    key:ClearAllPoints(); key:SetPoint("TOPLEFT", mix, "TOPLEFT", lx, -12)
+    lx = lx + key:GetWidth() + 14
+  end
+  mix:SetShown(total > 0)
+end
+ns.renderMixForTest = renderMix
+
 function ns.buildRoster(page)
   local bar = CreateFrame("Frame", nil, page)
   bar:SetPoint("TOPLEFT"); bar:SetPoint("TOPRIGHT"); bar:SetHeight(28)
+  R.mix = buildMix(page)
+  R.mix:SetPoint("TOPLEFT", 0, -36); R.mix:SetPoint("TOPRIGHT", 0, -36)
   local area = CreateFrame("Frame", nil, page)
-  area:SetPoint("TOPLEFT", 0, -38); area:SetPoint("BOTTOMRIGHT")
+  area:SetPoint("TOPLEFT", 0, -74); area:SetPoint("BOTTOMRIGHT")
   R.area = area
   local holder = CreateFrame("Frame", nil, area)
   holder:SetPoint("TOPLEFT"); holder:SetPoint("BOTTOMRIGHT")
@@ -518,6 +611,19 @@ function ns.renderRoster()
     end
   end
 
+  local counts = {}
+  for _, row in ipairs(shown) do
+    local cf = row.m.classFile
+    if cf then
+      local c = counts[cf] or { 0, 0 }
+      c[1] = c[1] + 1
+      if row.m.online then c[2] = c[2] + 1 end
+      counts[cf] = c
+    end
+  end
+  if R.cls and not counts[R.cls] then R.cls = nil end -- the last of that class left (or the list hasn't loaded)
+  renderMix(R.mix, counts)
+
   local officer = try(C_GuildInfo.CanViewOfficerNote)
   local rows, selected = {}, nil
   for _, row in ipairs(shown) do
@@ -529,7 +635,7 @@ function ns.renderRoster()
     local text = (m.name .. " " .. m.rank .. " " .. m.zone .. " " .. m.note .. " " .. (m.className or "") .. " "
       .. info.spec .. " " .. info.profs) :lower()
     for _, o in ipairs(others) do text = text .. " " .. o.name:lower() end
-    if (R.showOffline or anyOnline) and (R.filter == "" or text:find(R.filter, 1, true)) then
+    if (R.showOffline or anyOnline) and (R.filter == "" or text:find(R.filter, 1, true)) and (not R.cls or m.classFile == R.cls) then
       local dim = not m.online
       local extra = #others > 0 and color(T.HEX.muted, "  +" .. #others) or ""
       rows[#rows + 1] = {
