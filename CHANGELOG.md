@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.24.0
+
+- **Shit List: everyone can add**: anyone in the guild can now put a player on the Shit List, not just officers. Right-click their portrait or name and choose **Add to the Shit List**, use the button on the Shit List page, or type `/ppta shitlist add First Surname - reason`. It shows for the whole guild straight away, with your name as who added it.
+- You can take off names you added (click them on the Shit List page, or right-click them). Officers can take off anyone, and a name an officer takes off stays off: only an officer can put it back.
+- Each person can have up to 50 names on the list.
+
 ## 2.23.0
 
 - **Dark mode**: a shadowier look for the Perpetua window. The navy background turns charcoal, the gold borders, headings and buttons turn a muted brass, and class colours, item colours and the rest of the text are toned down. Turn it on with the new **DARK** switch at the top of the window, in Options > AddOns > Perpetua, or with `/ppta dark`. Switching reloads your UI.
